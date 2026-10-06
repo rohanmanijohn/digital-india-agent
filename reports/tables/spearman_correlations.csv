@@ -1,0 +1,4 @@
+,rating,n_words,thumbs_up
+rating,1.0,-0.567,-0.225
+n_words,-0.567,1.0,0.348
+thumbs_up,-0.225,0.348,1.0

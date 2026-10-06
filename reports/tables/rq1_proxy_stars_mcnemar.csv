@@ -1,0 +1,3 @@
+comparison,agent_only_correct,baseline_only_correct,chi2,p,macro_f1_diff,ci_low,ci_high,p_holm
+LLM agent vs VADER,184,40,91.2902,0.0,0.1296,0.0822,0.1784,0.0
+LLM agent vs XLM-R,40,31,0.9014,0.3424,-0.0138,-0.0626,0.0359,0.3424

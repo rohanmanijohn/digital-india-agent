@@ -1,0 +1,4 @@
+system,n,accuracy,macro_f1,cohen_kappa
+LLM agent,592,0.792,0.598,0.607
+VADER,592,0.549,0.468,0.313
+XLM-R,592,0.777,0.612,0.59

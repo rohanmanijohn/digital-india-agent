@@ -1,0 +1,6 @@
+service_category,count,mean,std,median,ci_low,ci_high
+citizen_services,4000,3.228,1.873,4.0,3.17,3.286
+health,8000,3.623,1.737,5.0,3.585,3.661
+identity_documents,8000,3.459,1.804,5.0,3.419,3.499
+payments,4000,2.733,1.748,2.0,2.679,2.787
+transport,8000,3.051,1.876,3.0,3.01,3.092

@@ -1,0 +1,6 @@
+RQ,Method,Key parameters,Minimum N
+RQ1,McNemar (paired proportions),"alpha=.05, power=.80, psi=0.20, delta=0.08",243
+RQ1,95% CI on accuracy,"Z=1.96, p=0.5, e=0.05",385
+RQ2,"Chi-square, 10 aspects x 2 (negative / not)","alpha=.05, power=.80, w=0.10 (small), df=9",1565
+RQ3,"One-way ANOVA, k=5 service categories","alpha=.05, power=.80, f=0.10 (small)",1199
+RQ4,"Paired t-test (RAG vs no-RAG, same reviews)","alpha=.05, power=.80, d=0.30 (small-medium)",90

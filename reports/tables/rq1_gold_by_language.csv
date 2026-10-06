@@ -1,0 +1,7 @@
+language,system,n,accuracy,macro_f1
+english,LLM agent,343,0.948,0.786
+english,VADER,343,0.618,0.499
+english,XLM-R,343,0.93,0.774
+non_english,LLM agent,57,0.965,0.855
+non_english,VADER,57,0.298,0.352
+non_english,XLM-R,57,0.807,0.702

@@ -1,0 +1,9 @@
+service_category,app_name,n,mean_rating,sd_rating,median_rating,pct_1_star,pct_5_star,median_words,iqr_words,pct_official_reply,pct_devanagari,first_review,last_review
+citizen_services,UMANG,4000,3.23,1.87,4.0,38.2,48.4,2.0,6.0,98.7,1.2,2026-08-04,2026-09-25
+health,ABHA,4000,4.34,1.24,5.0,8.8,71.2,1.0,1.0,0.0,1.2,2026-07-07,2026-09-25
+health,Aarogya Setu,4000,2.91,1.86,3.0,44.6,39.3,3.0,8.0,13.4,1.1,2023-01-09,2026-09-25
+identity_documents,DigiLocker,4000,3.5,1.78,5.0,29.7,52.7,3.0,10.0,51.6,1.3,2026-05-18,2026-09-25
+identity_documents,mAadhaar,4000,3.42,1.83,5.0,33.1,52.1,3.0,8.0,0.4,1.7,2025-10-23,2026-09-23
+payments,BHIM,4000,2.73,1.75,2.0,44.0,29.8,11.0,24.0,92.1,1.5,2026-08-07,2026-09-25
+transport,IRCTC Rail Connect,4000,3.74,1.71,5.0,24.5,58.7,2.0,5.0,1.0,1.0,2026-09-18,2026-09-26
+transport,mParivahan,4000,2.36,1.78,1.0,59.5,28.0,5.0,13.0,89.2,1.2,2026-07-21,2026-09-26

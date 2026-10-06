@@ -1,0 +1,27 @@
+# data collection
+google-play-scraper
+pandas
+# agent (Google ADK 2.x graph workflow; Groq models via LiteLLM)
+google-adk>=2.10
+litellm
+pydantic
+python-dotenv
+# RAG
+fastembed
+numpy
+# analysis
+vaderSentiment
+transformers
+torch  # CPU build: pip install torch --index-url https://download.pytorch.org/whl/cpu
+scipy
+statsmodels
+scikit-learn
+matplotlib
+openpyxl
+# API
+fastapi
+uvicorn[standard]
+# legacy LangGraph version (agent/legacy_langgraph.py)
+langgraph
+langchain-groq
+pytest

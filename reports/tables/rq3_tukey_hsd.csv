@@ -1,0 +1,11 @@
+group1,group2,meandiff,p-adj,lower,upper,reject
+citizen_services,health,0.3955,0.0,0.3,0.491,True
+citizen_services,identity_documents,0.2313,0.0,0.1357,0.3268,True
+citizen_services,payments,-0.4947,0.0,-0.605,-0.3845,True
+citizen_services,transport,-0.1766,0.0,-0.2721,-0.0811,True
+health,identity_documents,-0.1642,0.0,-0.2422,-0.0863,True
+health,payments,-0.8902,0.0,-0.9858,-0.7947,True
+health,transport,-0.5721,0.0,-0.6501,-0.4941,True
+identity_documents,payments,-0.726,0.0,-0.8215,-0.6305,True
+identity_documents,transport,-0.4079,0.0,-0.4859,-0.3299,True
+payments,transport,0.3181,0.0,0.2226,0.4136,True

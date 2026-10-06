@@ -1,0 +1,11 @@
+primary_aspect,not_negative,negative,pct_negative,std_residual_negative,ci_low,ci_high
+login_otp_authentication,2,73,97.3,1.89,90.79,99.27
+server_downtime_performance,5,135,96.4,2.46,91.91,98.47
+ui_usability,53,22,29.3,-4.77,20.24,40.44
+aadhaar_kyc_linking,5,10,66.7,-0.5,41.71,84.82
+payments_transactions,2,28,93.3,0.95,78.68,98.15
+documents_certificates,9,21,70.0,-0.5,52.12,83.34
+customer_support_grievance,2,8,80.0,0.07,49.02,94.33
+privacy_security,0,6,100.0,0.61,60.97,100.0
+app_update_bugs,1,33,97.1,1.26,85.08,99.48
+other,24,30,55.6,-1.87,42.38,68.0

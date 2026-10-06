@@ -1,0 +1,10 @@
+check,count
+rows,32000
+duplicate review_id,0
+duplicate text (same app),11338
+missing text,0
+missing rating,0
+missing app_version,5887
+reviews < 5 words,19198
+reviews with official reply,13855
+rating outside 1-5,0
