@@ -3,6 +3,8 @@
 Agentic LLM pipeline for aspect-based analysis of, and grounded replies to, citizen feedback on India's
 digital public services (QM 640 Data Analytics Capstone).
 
+**Author:** Rohan Mani John · Walsh College · QM 640 Data Analytics Capstone (2026)
+
 ```
 React (Vite) ──/api──▶ FastAPI ──▶ Google ADK 2.x Workflow ──▶ Groq (open-weight LLMs)
                                         │
