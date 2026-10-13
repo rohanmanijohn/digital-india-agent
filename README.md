@@ -47,13 +47,39 @@ cp .env.example .env            # then put your GROQ_API_KEY in .env
 
 ## Run
 
-```bash
-python -m scraper.playstore_scraper --per-app 1000   # 1. collect reviews
-python -m rag.build_kb                               # 2. build the RAG index
-python run_agent.py --n 40 --min-words 8             # 3. batch-run the agent (resumable)
+### Data access
 
-uvicorn api.main:app --reload --port 8000            # 4. API  (docs: http://localhost:8000/docs)
-cd frontend && npm install && npm run dev            # 5. UI   (http://localhost:5173)
+The dataset is in this repository, so no collection is needed to reproduce the analysis:
+
+| File | Contents |
+|---|---|
+| `data/raw/playstore_reviews_2026-10-13_window.csv` | **Study dataset**: 35,294 reviews, all 8 apps over the same window (1 Oct 2025 – 30 Sep 2026), English + Hindi listings |
+| `data/raw/window_population.csv` | Reviews per app in the window and the sampling fraction (apps above 5,000 sampled at random, seed 42) |
+| `data/raw/playstore_reviews_2026-09-27.csv` | Pilot collection (newest 4,000 per app; unequal time periods) |
+
+To re-collect from Google Play instead:
+
+```bash
+python -m scraper.window_scraper --since 2025-10-01 --until 2026-09-30 --cap 5000
+```
+
+### Reproduce the pipeline (seven commands)
+
+```bash
+python -m scraper.window_scraper --since 2025-10-01 --until 2026-09-30 --cap 5000  # 1. collect (optional, data included)
+python -m rag.build_kb                       # 2. knowledge base of official replies
+python -m analysis.sampling                  # 3. stratified study sample + reference set (seed 42)
+python -m analysis.run_analyzer              # 4. agent batch analysis (resumable; stops at the daily free-tier limit)
+python -m analysis.baselines                 # 5. VADER + XLM-R baselines
+python -m analysis.rq4_rag_ablation          # 6. RAG vs no-RAG experiment
+python -m analysis.stats_tests               # 7. all hypothesis tests -> reports/tables, reports/figures
+```
+
+### Run the web app
+
+```bash
+uvicorn api.main:app --reload --port 8000    # API  (docs: http://localhost:8000/docs)
+cd frontend && npm install && npm run dev    # UI   (http://localhost:5173)
 ```
 
 ## Research analysis (RQ1–RQ4)

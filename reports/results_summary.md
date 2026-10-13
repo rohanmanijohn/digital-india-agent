@@ -2,20 +2,20 @@
 
 ## RQ1 - Agent vs lexicon and transformer baselines (sentiment classification)
 
-### Preliminary: star rating as proxy ground truth (1-2★ neg, 3★ neu, 4-5★ pos), n = 592
+### Preliminary: star rating as proxy ground truth (1-2★ neg, 3★ neu, 4-5★ pos), n = 937
 Caveat: ratings and text often disagree, so this is a proxy, not the RQ1 test.
    system   n  accuracy  macro_f1  cohen_kappa
-LLM agent 592     0.792     0.598        0.607
-    VADER 592     0.549     0.468        0.313
-    XLM-R 592     0.777     0.612        0.590
-  LLM agent vs VADER: McNemar χ²(1) = 91.29, p(Holm) < .001; ΔmacroF1 = +0.130 [95% CI +0.082, +0.178]
-  LLM agent vs XLM-R: McNemar χ²(1) = 0.90, p(Holm) = .342; ΔmacroF1 = -0.014 [95% CI -0.063, +0.036]
+LLM agent 937     0.783     0.571        0.558
+    VADER 937     0.550     0.462        0.297
+    XLM-R 937     0.774     0.588        0.552
+  LLM agent vs VADER: McNemar χ²(1) = 134.63, p(Holm) < .001; ΔmacroF1 = +0.108 [95% CI +0.069, +0.147]
+  LLM agent vs XLM-R: McNemar χ²(1) = 0.62, p(Holm) = .431; ΔmacroF1 = -0.018 [95% CI -0.057, +0.020]
 By language (english vs Hindi/Hinglish/other):
 language   english  non_english
 system                         
-LLM agent    0.625        0.511
-VADER        0.517        0.311
-XLM-R        0.646        0.518
+LLM agent    0.594        0.484
+VADER        0.500        0.298
+XLM-R        0.608        0.518
 
 ### RQ1 test: reference labels, n = 400
 Ground truth = AI reference labels (Claude, disclosed) reviewed by the researcher: 0/400 rows checked, 0 corrected (0.0% of checked rows).
@@ -34,57 +34,57 @@ VADER        0.499        0.352
 XLM-R        0.774        0.702
 
 ## RQ2 - Is negative sentiment associated with the service aspect?
-n = 469 reviews with an aspect; χ²(9) = 178.90, p < .001, Cramér's V = 0.618
+n = 777 reviews with an aspect; χ²(9) = 269.32, p < .001, Cramér's V = 0.589
 primary_negative             negative  not_negative  pct_negative  std_residual_negative
 primary_aspect                                                                          
-login_otp_authentication           73             2          97.3                   1.89
-server_downtime_performance       135             5          96.4                   2.46
-ui_usability                       22            53          29.3                  -4.77
-aadhaar_kyc_linking                10             5          66.7                  -0.50
-payments_transactions              28             2          93.3                   0.95
-documents_certificates             21             9          70.0                  -0.50
-customer_support_grievance          8             2          80.0                   0.07
-privacy_security                    6             0         100.0                   0.61
-app_update_bugs                    33             1          97.1                   1.26
-other                              30            24          55.6                  -1.87
-Logistic regression (pseudo-R² = 0.325):
+login_otp_authentication          220             2          99.1                   2.61
+server_downtime_performance       179             6          96.8                   2.03
+ui_usability                       36            62          36.7                  -5.04
+aadhaar_kyc_linking                10             7          58.8                  -1.10
+payments_transactions              57            10          85.1                   0.17
+documents_certificates             22            11          66.7                  -1.04
+customer_support_grievance         10             2          83.3                   0.01
+privacy_security                   11             2          84.6                   0.06
+app_update_bugs                    62             1          98.4                   1.33
+other                              39            28          58.2                  -2.24
+Logistic regression (pseudo-R² = 0.348):
                              odds_ratio  ci_low  ci_high      p
-const                             1.496   0.928    2.413  0.099
-login_otp_authentication         25.556   5.854  111.564  0.000
-server_downtime_performance       9.140   4.210   19.845  0.000
-ui_usability                      0.228   0.121    0.427  0.000
-aadhaar_kyc_linking               0.918   0.301    2.798  0.881
-payments_transactions             4.959   1.562   15.747  0.007
-documents_certificates            1.680   0.678    4.164  0.263
-customer_support_grievance        4.712   0.967   22.948  0.055
-privacy_security                  2.073   0.482    8.908  0.327
-app_update_bugs                  13.443   3.034   59.563  0.001
+const                             1.524   1.006    2.308  0.047
+login_otp_authentication         73.161  17.290  309.582  0.000
+server_downtime_performance       9.506   4.866   18.570  0.000
+ui_usability                      0.306   0.181    0.515  0.000
+aadhaar_kyc_linking               0.653   0.233    1.829  0.417
+payments_transactions             2.758   1.380    5.512  0.004
+documents_certificates            1.330   0.599    2.956  0.483
+customer_support_grievance        8.318   1.820   38.024  0.006
+privacy_security                  1.102   0.417    2.910  0.845
+app_update_bugs                  23.034   5.375   98.704  0.000
 
 ## RQ3 - Does citizen sentiment differ across service categories?
-DV = star rating, n = 32000
+DV = star rating, n = 35294
                     count   mean    std  median    ci_low   ci_high
 service_category                                                   
-citizen_services     4000  3.228  1.873     4.0  3.169955  3.286045
-health               8000  3.623  1.737     5.0  3.584936  3.661064
-identity_documents   8000  3.459  1.804     5.0  3.419468  3.498532
-payments             4000  2.733  1.748     2.0  2.678829  2.787171
-transport            8000  3.051  1.876     3.0  3.009890  3.092110
-One-way ANOVA F(4, 31995) = 216.14, p < .001, η² = 0.026
-Welch ANOVA F = 226.14, p < .001 (unequal variances)
-Kruskal-Wallis H(4) = 837.36, p < .001 (ordinal DV)
+citizen_services     5000  4.443  1.161     5.0  4.410819  4.475181
+health               5574  4.304  1.293     5.0  4.270055  4.337945
+identity_documents   9720  3.594  1.764     5.0  3.558931  3.629069
+payments             5000  3.352  1.781     4.0  3.302633  3.401367
+transport           10000  2.648  1.861     1.0  2.611524  2.684476
+One-way ANOVA F(4, 35289) = 1412.24, p < .001, η² = 0.138
+Welch ANOVA F = 1659.73, p < .001 (unequal variances)
+Kruskal-Wallis H(4) = 4400.09, p < .001 (ordinal DV)
 Tukey HSD:
             group1             group2  meandiff  p-adj   lower   upper  reject
-  citizen_services             health    0.3955    0.0  0.3000  0.4910    True
-  citizen_services identity_documents    0.2313    0.0  0.1357  0.3268    True
-  citizen_services           payments   -0.4947    0.0 -0.6050 -0.3845    True
-  citizen_services          transport   -0.1766    0.0 -0.2721 -0.0811    True
-            health identity_documents   -0.1642    0.0 -0.2422 -0.0863    True
-            health           payments   -0.8902    0.0 -0.9858 -0.7947    True
-            health          transport   -0.5721    0.0 -0.6501 -0.4941    True
-identity_documents           payments   -0.7260    0.0 -0.8215 -0.6305    True
-identity_documents          transport   -0.4079    0.0 -0.4859 -0.3299    True
-          payments          transport    0.3181    0.0  0.2226  0.4136    True
-Secondary DV = LLM sentiment score (-1/0/+1), n = 592: Kruskal-Wallis H = 72.68, p < .001
+  citizen_services             health   -0.1386 0.0002 -0.2266 -0.0505    True
+  citizen_services identity_documents   -0.8487 0.0000 -0.9273 -0.7700    True
+  citizen_services           payments   -1.0914 0.0000 -1.1818 -1.0010    True
+  citizen_services          transport   -1.7954 0.0000 -1.8737 -1.7171    True
+            health identity_documents   -0.7101 0.0000 -0.7860 -0.6342    True
+            health           payments   -0.9528 0.0000 -1.0409 -0.8648    True
+            health          transport   -1.6568 0.0000 -1.7324 -1.5813    True
+identity_documents           payments   -0.2427 0.0000 -0.3214 -0.1641    True
+identity_documents          transport   -0.9467 0.0000 -1.0111 -0.8824    True
+          payments          transport   -0.7040 0.0000 -0.7823 -0.6257    True
+Secondary DV = LLM sentiment score (-1/0/+1), n = 937: Kruskal-Wallis H = 49.43, p < .001
 
 ## RQ4 - Does RAG grounding improve reply groundedness?
 groundedness: RAG M = 4.29 vs no-RAG M = 3.24; t(99) = 9.67, p < .001, d_z = 0.97; Wilcoxon p < .001
