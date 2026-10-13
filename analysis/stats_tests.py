@@ -12,7 +12,8 @@ from statsmodels.stats.multitest import multipletests
 from statsmodels.stats.oneway import anova_oneway
 from statsmodels.stats.proportion import proportion_confint
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
-import statsmodels.api as sm
+from statsmodels.discrete.discrete_model import Logit
+from statsmodels.tools.tools import add_constant
 import matplotlib.pyplot as plt
 
 from analysis import plot_style as ps
@@ -209,7 +210,7 @@ def rq2():
         say(f"Excluded from the logit for perfect separation (reported descriptively above): {', '.join(separated)}")
         X = X.drop(columns=separated)
     try:
-        m = sm.Logit(y, sm.add_constant(X)).fit(disp=False)
+        m = Logit(y, add_constant(X)).fit(disp=False)
         orr = pd.DataFrame({"odds_ratio": np.exp(m.params), "ci_low": np.exp(m.conf_int()[0]),
                             "ci_high": np.exp(m.conf_int()[1]), "p": m.pvalues}).round(3)
         orr.to_csv(TAB / "rq2_logit_odds_ratios.csv", index_label="term")
