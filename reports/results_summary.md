@@ -2,63 +2,50 @@
 
 ## RQ1 - Agent vs lexicon and transformer baselines (sentiment classification)
 
-### Preliminary: star rating as proxy ground truth (1-2★ neg, 3★ neu, 4-5★ pos), n = 937
+### Preliminary: star rating as proxy ground truth (1-2★ neg, 3★ neu, 4-5★ pos), n = 485
 Caveat: ratings and text often disagree, so this is a proxy, not the RQ1 test.
    system   n  accuracy  macro_f1  cohen_kappa
-LLM agent 937     0.783     0.571        0.558
-    VADER 937     0.550     0.462        0.297
-    XLM-R 937     0.774     0.588        0.552
-  LLM agent vs VADER: McNemar χ²(1) = 134.63, p(Holm) < .001; ΔmacroF1 = +0.108 [95% CI +0.069, +0.147]
-  LLM agent vs XLM-R: McNemar χ²(1) = 0.62, p(Holm) = .431; ΔmacroF1 = -0.018 [95% CI -0.057, +0.020]
+LLM agent 485     0.800     0.619        0.613
+    VADER 485     0.482     0.431        0.261
+    XLM-R 485     0.775     0.596        0.580
+  LLM agent vs VADER: McNemar χ²(1) = 110.42, p(Holm) < .001; ΔmacroF1 = +0.187 [95% CI +0.131, +0.248]
+  LLM agent vs XLM-R: McNemar χ²(1) = 1.83, p(Holm) = .176; ΔmacroF1 = +0.022 [95% CI -0.040, +0.085]
 By language (english vs Hindi/Hinglish/other):
 language   english  non_english
 system                         
-LLM agent    0.594        0.484
-VADER        0.500        0.298
-XLM-R        0.608        0.518
+LLM agent    0.673        0.554
+VADER        0.535        0.251
+XLM-R        0.722        0.480
 
-### RQ1 test: reference labels, n = 400
-Ground truth = AI reference labels (Claude, disclosed) reviewed by the researcher: 0/400 rows checked, 0 corrected (0.0% of checked rows).
-Caveat: not every row has been checked yet, so this result is provisional.
-   system   n  accuracy  macro_f1  cohen_kappa
-LLM agent 400     0.950     0.798        0.863
-    VADER 400     0.572     0.485        0.323
-    XLM-R 400     0.912     0.765        0.783
-  LLM agent vs VADER: McNemar χ²(1) = 124.31, p(Holm) < .001; ΔmacroF1 = +0.311 [95% CI +0.226, +0.400]
-  LLM agent vs XLM-R: McNemar χ²(1) = 5.30, p(Holm) = .021; ΔmacroF1 = +0.032 [95% CI -0.038, +0.104]
-By language (english vs Hindi/Hinglish/other):
-language   english  non_english
-system                         
-LLM agent    0.786        0.855
-VADER        0.499        0.352
-XLM-R        0.774        0.702
+### Human reference labels: 0/400 settled - need >= 385 before the RQ1 test is valid.
 
 ## RQ2 - Is negative sentiment associated with the service aspect?
-n = 777 reviews with an aspect; χ²(9) = 269.32, p < .001, Cramér's V = 0.589
+Reviews analysed by the agent in the study sample: 485 of 2,000
+n = 392 reviews with an aspect; χ²(9) = 116.01, p < .001, Cramér's V = 0.544
 primary_negative             negative  not_negative  pct_negative  std_residual_negative
 primary_aspect                                                                          
-login_otp_authentication          220             2          99.1                   2.61
-server_downtime_performance       179             6          96.8                   2.03
-ui_usability                       36            62          36.7                  -5.04
-aadhaar_kyc_linking                10             7          58.8                  -1.10
-payments_transactions              57            10          85.1                   0.17
-documents_certificates             22            11          66.7                  -1.04
-customer_support_grievance         10             2          83.3                   0.01
-privacy_security                   11             2          84.6                   0.06
-app_update_bugs                    62             1          98.4                   1.33
-other                              39            28          58.2                  -2.24
-Logistic regression (pseudo-R² = 0.348):
+login_otp_authentication           67             0         100.0                   1.79
+server_downtime_performance       108             5          95.6                   1.80
+ui_usability                       19            34          35.8                  -3.61
+aadhaar_kyc_linking                 7             4          63.6                  -0.62
+payments_transactions              16             4          80.0                  -0.02
+documents_certificates             29            10          74.4                  -0.42
+customer_support_grievance          4             2          66.7                  -0.37
+privacy_security                    8             2          80.0                  -0.01
+app_update_bugs                    31             1          96.9                   1.04
+other                              26            15          63.4                  -1.21
+Excluded from the logit for perfect separation (reported descriptively above): login_otp_authentication
+Logistic regression (pseudo-R² = 0.231):
                              odds_ratio  ci_low  ci_high      p
-const                             1.524   1.006    2.308  0.047
-login_otp_authentication         73.161  17.290  309.582  0.000
-server_downtime_performance       9.506   4.866   18.570  0.000
-ui_usability                      0.306   0.181    0.515  0.000
-aadhaar_kyc_linking               0.653   0.233    1.829  0.417
-payments_transactions             2.758   1.380    5.512  0.004
-documents_certificates            1.330   0.599    2.956  0.483
-customer_support_grievance        8.318   1.820   38.024  0.006
-privacy_security                  1.102   0.417    2.910  0.845
-app_update_bugs                  23.034   5.375   98.704  0.000
+const                             4.402   2.748    7.050  0.000
+server_downtime_performance       6.746   2.526   18.020  0.000
+ui_usability                      0.146   0.079    0.273  0.000
+aadhaar_kyc_linking               0.453   0.110    1.861  0.272
+payments_transactions             1.203   0.397    3.642  0.744
+documents_certificates            0.719   0.319    1.622  0.427
+customer_support_grievance        1.509   0.267    8.537  0.642
+privacy_security                  0.665   0.208    2.130  0.492
+app_update_bugs                   3.927   1.117   13.811  0.033
 
 ## RQ3 - Does citizen sentiment differ across service categories?
 DV = star rating, n = 35294
@@ -84,7 +71,7 @@ Tukey HSD:
 identity_documents           payments   -0.2427 0.0000 -0.3214 -0.1641    True
 identity_documents          transport   -0.9467 0.0000 -1.0111 -0.8824    True
           payments          transport   -0.7040 0.0000 -0.7823 -0.6257    True
-Secondary DV = LLM sentiment score (-1/0/+1), n = 937: Kruskal-Wallis H = 49.43, p < .001
+Secondary DV = LLM sentiment score (-1/0/+1), n = 485: Kruskal-Wallis H = 49.41, p < .001
 
 ## RQ4 - Does RAG grounding improve reply groundedness?
 groundedness: RAG M = 4.29 vs no-RAG M = 3.24; t(99) = 9.67, p < .001, d_z = 0.97; Wilcoxon p < .001

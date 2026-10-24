@@ -35,6 +35,37 @@ def fmt_p(p: float) -> str:
     return "< .001" if p < 0.001 else f"= {p:.3f}".replace("0.", ".")
 
 
+REVIEWER_FILES = [DATA_PROCESSED / "gold_set_reviewer1.xlsx", DATA_PROCESSED / "gold_set_reviewer2.xlsx"]
+SETTLED_FILE = DATA_PROCESSED / "gold_set_settled.xlsx"  # optional: review_id + settled_* for resolved disagreements
+
+
+def settled_reference_labels() -> pd.DataFrame | None:
+    """Two independent human reviewers -> agreement (kappa) -> settled label (agreement, or joint resolution)."""
+    if not all(f.exists() for f in REVIEWER_FILES):
+        return None
+    r1, r2 = (pd.read_excel(f)[["review_id", "label_sentiment", "label_primary_aspect", "label_language"]] for f in REVIEWER_FILES)
+    both = r1.merge(r2, on="review_id", suffixes=("_1", "_2"))
+    both = both[both["label_sentiment_1"].isin(LABELS) & both["label_sentiment_2"].isin(LABELS)]
+    if both.empty:
+        return None
+    for field in ["sentiment", "primary_aspect"]:
+        a, b = both[f"label_{field}_1"].astype(str), both[f"label_{field}_2"].astype(str)
+        say(f"Inter-rater agreement ({field}, n = {len(both)}): Cohen's kappa = {cohen_kappa_score(a, b):.3f}, "
+            f"raw agreement = {(a == b).mean():.1%}")
+    out = pd.DataFrame({"review_id": both["review_id"]})
+    for field in ["sentiment", "primary_aspect", "language"]:
+        agree = both[f"label_{field}_1"] == both[f"label_{field}_2"]
+        out[f"label_{field}"] = both[f"label_{field}_1"].where(agree)
+    if SETTLED_FILE.exists():
+        settled = pd.read_excel(SETTLED_FILE).set_index("review_id")
+        for field in ["sentiment", "primary_aspect", "language"]:
+            col = f"settled_{field}"
+            if col in settled:
+                fill = out["review_id"].map(settled[col])
+                out[f"label_{field}"] = out[f"label_{field}"].fillna(fill)
+    return out[out["label_sentiment"].isin(LABELS)]
+
+
 def final_gold_labels(sheet: pd.DataFrame) -> pd.DataFrame:
     """Researcher's correction where given, otherwise the disclosed AI reference label."""
     out = sheet[["review_id"]].copy()
@@ -154,19 +185,13 @@ def rq1():
     _by_language(df, "star_label", systems, "proxy_stars", "language")
     _confusion_figure(df, "star_label", systems["LLM agent"], "proxy_stars")
 
-    gold_path = DATA_PROCESSED / "gold_set.xlsx"
-    gold = final_gold_labels(pd.read_excel(gold_path))
-    gold = gold[gold["label_sentiment"].isin(LABELS)]
-    if len(gold) < 385:
-        say(f"\n### Gold standard: {len(gold)}/400 labelled - need >= 385 before the RQ1 test is valid.\n")
+    gold = settled_reference_labels()
+    if gold is None or len(gold) < 385:
+        n = 0 if gold is None else len(gold)
+        say(f"\n### Human reference labels: {n}/400 settled - need >= 385 before the RQ1 test is valid.\n")
         return
     g = df.merge(gold[["review_id", "label_sentiment", "label_language"]], on="review_id")
-    reviewed, corrected = int(gold["reviewed"].sum()), int(gold["corrected"].sum())
-    say(f"\n### RQ1 test: reference labels, n = {len(g)}")
-    say(f"Ground truth = AI reference labels (Claude, disclosed) reviewed by the researcher: {reviewed}/{len(gold)} rows "
-        f"checked, {corrected} corrected ({corrected / max(reviewed, 1):.1%} of checked rows).")
-    if reviewed < len(gold):
-        say("Caveat: not every row has been checked yet, so this result is provisional.")
+    say(f"\n### RQ1 test: human reference labels (two independent reviewers, settled), n = {len(g)}")
     _classifier_report(g, "label_sentiment", systems, "gold")
     _by_language(g, "label_sentiment", systems, "gold", "label_language")
     _confusion_figure(g, "label_sentiment", systems["LLM agent"], "gold")
@@ -181,6 +206,9 @@ def rq2():
         say("Skipped: need analyzer_results.jsonl.\n")
         return
     res = pd.read_json(ar, lines=True).drop_duplicates("review_id")
+    # only reviews in the current study sample (the results file also keeps earlier pilot analyses)
+    res = res[res["review_id"].isin(pd.read_csv(DATA_PROCESSED / "analysis_sample.csv")["review_id"])]
+    say(f"Reviews analysed by the agent in the study sample: {len(res)} of 2,000")
     res = res[res["relevant"] & res["aspects"].map(len).gt(0)]
     # unit of analysis = one review; its primary (first-listed) aspect keeps observations independent
     res["primary_aspect"] = res["aspects"].map(lambda a: a[0]["aspect"])

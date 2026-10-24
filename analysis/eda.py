@@ -130,6 +130,56 @@ def fig_time_coverage(df: pd.DataFrame):
     plt.close(fig)
 
 
+# categorical slots 1-5 of the validated reference palette, in fixed order (never cycled)
+CATEGORY_COLORS = {"citizen_services": "#2a78d6", "health": "#eb6834", "identity_documents": "#1baf7a",
+                   "payments": "#eda100", "transport": "#e87ba4"}
+
+
+def fig_monthly_trend(df: pd.DataFrame):
+    """Mean star rating per month for each service category, to show trends inside the common window."""
+    m = df.assign(month=df["review_date"].dt.to_period("M").dt.to_timestamp())
+    trend = m.groupby(["service_category", "month"])["rating"].mean().unstack(0)
+    fig, ax = plt.subplots(figsize=(7.5, 4.2))
+    ends = []
+    for cat, color in CATEGORY_COLORS.items():
+        if cat in trend:
+            s = trend[cat].dropna()
+            ax.plot(s.index, s.values, color=color, linewidth=2, marker="o", markersize=4, label=cat.replace("_", " "))
+            ends.append([s.values[-1], cat.replace("_", " "), s.index[-1]])
+    # direct labels at the line ends, nudged apart so close endpoints do not overlap
+    ends.sort()
+    for i in range(1, len(ends)):
+        ends[i][0] = max(ends[i][0], ends[i - 1][0] + 0.14)
+    for y, name, x in ends:
+        ax.text(x, y, "  " + name, color=ps.INK_2, fontsize=8, va="center")
+    ax.set_ylim(1, 5)
+    ax.set_ylabel("Mean star rating")
+    ax.set_xlabel("Month of review")
+    ax.legend(ncol=3, loc="lower center", bbox_to_anchor=(0.5, 1.0), fontsize=8)
+    fig.autofmt_xdate()
+    fig.savefig(FIG / "eda_monthly_rating_by_category.png")
+    plt.close(fig)
+    trend.round(3).to_csv(TAB / "monthly_rating_by_category.csv")
+
+
+def fig_language_mix(df: pd.DataFrame):
+    """Share of eligible (>= 5 words) reviews that are not in English, by app."""
+    from analysis.sampling import language_guess
+    e = df[df["n_words"] >= 5].copy()
+    e["non_english"] = e["text"].map(language_guess) != "english"
+    share = (e.groupby("app_name")["non_english"].mean() * 100).sort_values()
+    fig, ax = plt.subplots(figsize=(7.5, 3.8))
+    ax.barh(share.index, share.values, color=ps.BLUE, height=0.55)
+    for i, v in enumerate(share.values):
+        ax.text(v + 0.3, i, f"{v:.1f}%", va="center", fontsize=8.5, color=ps.INK)
+    ax.set_xlim(0, max(25, share.max() + 5))
+    ax.set_xlabel("Eligible reviews written in Hindi, Hinglish or another Indian language (%)")
+    ax.grid(axis="y", visible=False)
+    fig.savefig(FIG / "eda_language_mix.png")
+    plt.close(fig)
+    share.round(1).to_csv(TAB / "language_mix_by_app.csv")
+
+
 def main():
     FIG.mkdir(parents=True, exist_ok=True)
     TAB.mkdir(parents=True, exist_ok=True)
@@ -149,6 +199,8 @@ def main():
     fig_review_length(df)
     fig_official_reply_rate(df)
     fig_time_coverage(df)
+    fig_monthly_trend(df)
+    fig_language_mix(df)
 
     print(dq.to_string(index=False), "\n")
     print(desc.drop(columns=["first_review", "last_review"]).to_string(index=False), "\n")
