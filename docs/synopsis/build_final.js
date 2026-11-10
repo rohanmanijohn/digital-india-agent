@@ -1,0 +1,597 @@
+// Builds the QM 640 synopsis (APA 7 student format) following the course template's headings and the grading rubric.
+// RQ order: RQ1 aspects, RQ2 service categories, RQ3 RAG grounding, RQ4 agent vs baselines.
+const fs = require("fs");
+const path = require("path");
+const {
+  Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, Header, AlignmentType,
+  PageNumber, WidthType, BorderStyle, ShadingType, LineRuleType, PageBreak, HeadingLevel, TableOfContents,
+} = require("docx");
+
+const HERE = __dirname;
+const PROJ = "C:/Users/Rohan Mani John/OneDrive/Desktop/Masters AI ML/Capstone/digital-india-agent";
+const OUT = "C:/Users/Rohan Mani John/OneDrive/Desktop/Masters AI ML/Capstone/Synopsis_Rohan_Mani_John.docx";
+const MENTOR = "Pralhad Teggi";
+const REPO = "https://github.com/rohanmanijohn/digital-india-agent";
+
+const FONT = "Times New Roman";
+const SIZE = 24; // 12 pt
+const DOUBLE = { line: 480, lineRule: LineRuleType.AUTO, before: 0, after: 0 };
+const SINGLE = { line: 240, lineRule: LineRuleType.AUTO, before: 0, after: 0 };
+
+// inline markup: **bold**, *italic*
+function runs(text, base = {}) {
+  const out = [];
+  const re = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push(new TextRun({ text: text.slice(last, m.index), font: FONT, size: SIZE, ...base }));
+    const t = m[0];
+    if (t.startsWith("**")) out.push(new TextRun({ text: t.slice(2, -2), bold: true, font: FONT, size: SIZE, ...base }));
+    else out.push(new TextRun({ text: t.slice(1, -1), italics: true, font: FONT, size: SIZE, ...base }));
+    last = m.index + t.length;
+  }
+  if (last < text.length) out.push(new TextRun({ text: text.slice(last), font: FONT, size: SIZE, ...base }));
+  return out;
+}
+
+const P = (text) => new Paragraph({ children: runs(text), spacing: DOUBLE, indent: { firstLine: 720 } });
+const Center = (text, opts = {}) => new Paragraph({ children: runs(text, opts), alignment: AlignmentType.CENTER, spacing: DOUBLE });
+// Built-in heading styles (restyled to APA below) so Word can build the table of contents
+const H1 = (text) => new Paragraph({ text, heading: HeadingLevel.HEADING_1 });
+const H2 = (text) => new Paragraph({ text, heading: HeadingLevel.HEADING_2 });
+const H3 = (text) => new Paragraph({ text, heading: HeadingLevel.HEADING_3 });
+const Blank = () => new Paragraph({ children: [], spacing: DOUBLE });
+const PB = () => new Paragraph({ children: [new PageBreak()] });
+const Eq = (text) => new Paragraph({ children: runs(text), alignment: AlignmentType.CENTER, spacing: DOUBLE });
+const Bullet = (text) => new Paragraph({ children: runs(text), spacing: DOUBLE, numbering: { reference: "bullets", level: 0 } });
+const Ref = (text) => new Paragraph({ children: runs(text), spacing: DOUBLE, indent: { left: 720, hanging: 720 } });
+const Mono = (text, last = false) => new Paragraph({ children: [new TextRun({ text, font: "Courier New", size: 18 })], spacing: SINGLE, keepNext: !last });
+const Label = (num, title) => [
+  new Paragraph({ children: runs(`**${num}**`), spacing: DOUBLE, keepNext: true }),
+  new Paragraph({ children: runs(`*${title}*`), spacing: DOUBLE, keepNext: true }),
+];
+const Note = (text) => new Paragraph({ children: runs(`*Note.* ${text}`, { size: 22 }), spacing: DOUBLE });
+
+const TABLE_W = 9360;
+const border = { style: BorderStyle.SINGLE, size: 4, color: "000000" };
+const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+function table(header, rows, widths) {
+  const cell = (text, isHead, i, lastRow) => new TableCell({
+    width: { size: widths[i], type: WidthType.DXA },
+    margins: { top: 60, bottom: 60, left: 90, right: 90 },
+    borders: { top: isHead ? border : none, bottom: isHead || lastRow ? border : none, left: none, right: none },
+    shading: isHead ? { fill: "F2F2F2", type: ShadingType.CLEAR, color: "auto" } : undefined,
+    children: [new Paragraph({ children: runs(String(text), { size: 20, bold: isHead }), spacing: SINGLE })],
+  });
+  return new Table({
+    width: { size: TABLE_W, type: WidthType.DXA },
+    columnWidths: widths,
+    rows: [
+      new TableRow({ tableHeader: true, cantSplit: true, children: header.map((h, i) => cell(h, true, i, false)) }),
+      ...rows.map((r, ri) => new TableRow({ cantSplit: true, children: r.map((c, i) => cell(c, false, i, ri === rows.length - 1)) })),
+    ],
+  });
+}
+function image(file, widthIn) {
+  const buf = fs.readFileSync(file);
+  const w = buf.readUInt32BE(16), h = buf.readUInt32BE(20);
+  const wpx = widthIn * 96;
+  return new Paragraph({
+    alignment: AlignmentType.CENTER, spacing: SINGLE, keepNext: true,
+    children: [new ImageRun({ type: "png", data: buf, transformation: { width: wpx, height: Math.round(wpx * h / w) } })],
+  });
+}
+
+// ===================================================================================== FINAL REPORT
+const FOUT = "C:/Users/Rohan Mani John/OneDrive/Desktop/Masters AI ML/Capstone/Final_Report_Rohan_Mani_John.docx";
+const FIG = (f) => path.join(PROJ, "reports/figures", f);
+const SCR = (f) => path.join(HERE, f);
+const FTITLE = "Analysing Citizen Feedback and Drafting Grounded Replies: An Agentic Large Language Model Approach for India's Digital Public Services";
+
+const fTitlePage = [
+  Blank(), Blank(), Blank(),
+  Center("Data Analytics Capstone", { bold: true }),
+  Center(FTITLE, { bold: true }),
+  Blank(),
+  Center("Final Report", { bold: true }),
+  Blank(),
+  Center("Rohan Mani John"),
+  Center("Walsh College"),
+  Center("QM640: Data Analytics Capstone"),
+  Center(MENTOR),
+  Center("Term 3"),
+  Center("November 10, 2026"),
+  PB(),
+];
+
+const fRepo = [
+  Center("Code and Data Repository", { bold: true }),
+  P(`All data files, code and generated results for this report are available at **${REPO}**. The repository README explains how to install the requirements and reproduce every table and figure; Appendix A lists the commands.`),
+];
+
+const fAbstract = [
+  new Paragraph({ children: runs("Abstract", { bold: true }), alignment: AlignmentType.CENTER, spacing: DOUBLE, pageBreakBefore: true }),
+  new Paragraph({ children: runs("Agencies that run India's digital public services receive more app-store feedback than they can read, so they cannot see which service aspects fail, where satisfaction is lowest or how to reply without misleading citizens. This study built and evaluated an agentic large language model (LLM) pipeline that classifies multilingual reviews, identifies the failing service aspect and drafts replies grounded, through retrieval-augmented generation (RAG), in agencies' own published responses. The data were 35,294 Google Play reviews of eight Government of India apps in five service categories; the unit of analysis is one review, and all apps share one window, October 1, 2025 to September 30, 2026. The agent analysed a stratified sample of 2,000 reviews, and a held-out test set of 400 reviews, half in Hindi, Hinglish or other Indian languages, was labelled by a human annotator blind to ratings and model outputs. The agent was built with Google's Agent Development Kit on open-weight models served by Groq, and local processing ran on a laptop central processing unit (CPU) without a graphics processing unit (GPU). Negativity was strongly associated with the service aspect (\u03c7\u00b2(9) = 509.83, *p* < .001, Cram\u00e9r's *V* = 0.56; human labels, *V* = 0.76), and a login problem multiplied the odds of a negative review about 30 times. Satisfaction differed across service categories (Welch *F* = 1,659.73, *p* < .001, \u03b7\u00b2 = .14), from 4.44 stars for citizen services to 2.65 for transport. Grounding raised judged groundedness from 3.24 to 4.29 (*t*(99) = 9.67, *p* < .001, *d*z = 0.97) and cut replies containing an unsupported claim from 87% to 44%. On the test set the agent was the best model, with accuracy .93 and macro-F1 .83, significantly better than the VADER lexicon (.45) and the XLM-R transformer (.69), especially on Hindi and Hinglish. Its aspect labels matched human labels only 59% of the time, below target. The system is implemented as a FastAPI service with a React web application in which a support officer approves every drafted reply."), spacing: DOUBLE }),
+  new Paragraph({ children: runs("*Keywords:* citizen feedback, digital public services, aspect-based sentiment analysis, retrieval-augmented generation, large language models, code-mixed text"), spacing: DOUBLE, indent: { firstLine: 720 } }),
+];
+
+const fContents = [
+  new Paragraph({ children: runs("Table of Contents", { bold: true }), alignment: AlignmentType.CENTER, spacing: DOUBLE, pageBreakBefore: true }),
+  new TableOfContents("Table of Contents", { hyperlink: true, headingStyleRange: "1-2" }),
+];
+
+// ------------------------------------------------------------------------------ introduction
+const fIntro = [
+  new Paragraph({ children: runs(FTITLE, { bold: true }), alignment: AlignmentType.CENTER, spacing: DOUBLE, pageBreakBefore: true }),
+  H1("Introduction"),
+  H2("Background and Context"),
+  P("India operates some of the largest digital public platforms in the world. UMANG (Unified Mobile Application for New-age Governance) brings central and state services into one app, DigiLocker issues verified documents, mAadhaar and BHIM (Bharat Interface for Money) carry identity and payments, ABHA (Ayushman Bharat Health Account) and Aarogya Setu serve health, and mParivahan and IRCTC (Indian Railway Catering and Tourism Corporation) Rail Connect serve transport. The United Nations nevertheless ranks India 97th of 193 countries on its E-Government Development Index (United Nations Department of Economic and Social Affairs [UN DESA], 2024), an index that measures what governments supply rather than how citizens experience it."),
+  P("Citizens record that experience publicly in app-store reviews written in English, Hindi, Hinglish (Hindi written in Latin script and mixed with English) and other Indian languages. The reviews name specific failures: one-time passwords (OTPs) that never arrive, server errors at peak hours, documents that cannot be fetched, and payments debited without a completed transaction. For the agencies that run the services, including the National e-Governance Division (NeGD), the Unique Identification Authority of India (UIDAI), the National Payments Corporation of India (NPCI), the National Health Authority (NHA), the National Informatics Centre (NIC) and the Centre for Railway Information Systems (CRIS), these reviews are a free and continuous source of operational intelligence, provided someone can read them, sort them by what has failed and answer them correctly."),
+  H2("Problem Statement"),
+  P("**The analytics problem.** Agencies need to know, from unstructured multilingual reviews, *what* is failing, *where* satisfaction is lowest and *how* to reply without misleading citizens, and they need an automated method accurate enough to trust. This study treats these as one problem with four measurable outcomes on the same review data: (a) whether negative sentiment depends on the service aspect a review discusses (aspect, nominal; negativity, binary); (b) whether star ratings differ across five service categories observed over the same period (category, nominal; rating, ordinal); (c) whether retrieving official guidance increases the factual groundedness of a drafted reply (retrieval condition; groundedness, 1\u20135); and (d) whether a large language model (LLM) agent classifies sentiment more accurately than established baselines (classifier; correct classification, binary). Outcomes (a) and (b) tell an agency where to act, (c) tells it whether automated replies can be trusted, and (d) tells it whether the automated reading behind (a) is reliable enough to use. The study analyses feedback and drafts replies for human approval; it does not claim that complaints are resolved."),
+  P("**Business problem.** In the 12-month dataset, 43.7% of reviews received an official reply, ranging from almost none for ABHA (0.1%) and mAadhaar (0.3%) to every review for UMANG, and most replies are templates. Citizens therefore receive no answer or a generic one, and product teams cannot prioritise engineering work because star ratings show that users are unhappy but not why. Replying to reviews is associated with higher ratings (Hassan et al., 2018), so the gap has a direct cost in public trust and service uptake."),
+  P("**Technical problem.** Existing tools do not fit the data. Lexicons such as the Valence Aware Dictionary and sEntiment Reasoner (VADER) read only English (Hutto & Gilbert, 2014); multilingual transformers struggle with code-mixed Hinglish (Patwa et al., 2020); aspect-based models need labelled data for each domain (Pontiki et al., 2014); and generative models invent facts such as helplines and procedures (Ji et al., 2023). The technical task is to classify multilingual, code-mixed reviews by sentiment and aspect without labelled training data, and to generate replies whose factual content is limited to verifiable official guidance."),
+  H2("Purpose and Objectives"),
+  P("The purpose is to build and evaluate an agentic LLM pipeline that turns raw citizen reviews into prioritised, verifiable information for agencies. Across the study, the dependent variables (Y) are negativity, star rating, reply groundedness and correct sentiment classification; the independent variables (X) are the service aspect, service category, retrieval condition and classifier. The unit of analysis is one review (one complaint answered twice in RQ3), and the timeframe is October 1, 2025 to September 30, 2026. Table 1 maps each objective to its research question (RQ), key variables and pre-set, measurable success target."),
+  ...Label("Table 1", "Objectives, Research Questions, Variables and Success Targets"),
+  table(["Objective", "RQ", "Key variables", "Success target"], [
+    ["O1 Explain which service aspects drive negative feedback", "RQ1", "Primary aspect \u2192 negativity", "Cram\u00e9r's V \u2265 0.10; agent aspect accuracy \u2265 0.80"],
+    ["O2 Compare satisfaction across service categories", "RQ2", "Service category \u2192 star rating", "\u03b7\u00b2 \u2265 0.01"],
+    ["O3 Test whether grounding replies reduces unsupported claims", "RQ3", "Retrieval condition \u2192 groundedness, unsupported claims", "Groundedness \u2265 4.0; \u2265 70% of replies with no unsupported claim"],
+    ["O4 Benchmark the agent's sentiment classification", "RQ4", "Classifier \u2192 correct classification", "Macro-F1 \u2265 0.75; not worse than XLM-R by > 0.05"],
+  ], [3000, 700, 2800, 2860]),
+];
+
+// ------------------------------------------------------------------------------ research questions
+const fScope = [
+  H1("Research Questions, Hypotheses and Scope"),
+  P("Each question has a null hypothesis (*H*\u2080) and an alternative hypothesis (*H*\u2081), tested at the 5% significance level (\u03b1 = .05): *H*\u2080 is rejected when *p* < .05."),
+  H2("Research Question 1 (RQ1)"),
+  P("Is negative sentiment associated with the service aspect a review discusses? *H*\u2080: negativity is independent of the aspect. *H*\u2081: negativity is associated with the aspect."),
+  H2("Research Question 2 (RQ2)"),
+  P("Does citizen satisfaction, measured by star rating, differ across the five service categories within the same collection period? *H*\u2080: all five category means are equal. *H*\u2081: at least one differs."),
+  H2("Research Question 3 (RQ3)"),
+  P("Does grounding the agent's reply in retrieved official guidance (retrieval-augmented generation, RAG) improve its factual groundedness compared with the same model replying without retrieval? *H*\u2080: the mean paired difference in groundedness is zero. *H*\u2081: it is not zero."),
+  H2("Research Question 4 (RQ4)"),
+  P("Does the agent classify review sentiment more accurately than a lexicon tool, VADER, and a fine-tuned multilingual transformer, XLM-RoBERTa (XLM-R)? *H*\u2080: the agent and each baseline have equal error rates on the same reviews. *H*\u2081: their error rates differ."),
+  H2("Variables, Scope and Feasibility"),
+  P("Table 2 identifies the variables for each question. The scope covers public Google Play reviews of eight central-government apps in five service categories, observed over the same 12-month window (October 1, 2025 to September 30, 2026); it excludes private grievance records, iOS reviews, sending replies and any claim that complaints are resolved. The project ran on a laptop processor and the free tier of the Groq model service, with batch analysis spread over several days."),
+  ...Label("Table 2", "Variables by Research Question"),
+  table(["RQ", "Independent variable (X)", "Dependent variable (Y)", "Unit of analysis"], [
+    ["RQ1", "Primary service aspect (nominal, 10 levels)", "Negative sentiment toward that aspect (binary)", "One review"],
+    ["RQ2", "Service category (nominal, 5 levels)", "Star rating (ordinal, 1\u20135 stars)", "One review"],
+    ["RQ3", "Retrieval condition (within-subject: RAG vs. no RAG)", "Groundedness (1\u20135 scale); unsupported claims (count per reply)", "One complaint, answered twice"],
+    ["RQ4", "Classifier (agent, VADER, XLM-R)", "Correct sentiment classification (binary)", "One review, classified three times"],
+  ], [800, 3000, 3560, 2000]),
+  Blank(),
+  H2("Sample Size"),
+  P("Minimum sample sizes were set a priori at \u03b1 = .05 and power = .80 (Table 3). For RQ1, the chi-square test with Cohen's (1988) small effect *w* = 0.10 and df = 9 needs noncentrality \u03bb = 15.65, so *n* = \u03bb / *w*\u00b2 = 15.65 / 0.01 = 1,565. For RQ2, one-way analysis of variance (ANOVA) with *f* = 0.10 and *k* = 5 needs \u03bb = 11.99, so *n* = 11.99 / 0.01 = 1,199. For RQ3, the paired *t*-test with *d*z = 0.30 gives *n* = [(1.960 + 0.842) / 0.30]\u00b2 + 1.960\u00b2 / 2 = 89.1, rounded up to 90. For RQ4, McNemar's test (Connor, 1987) with discordant proportion \u03c8 = 0.20 and difference \u03b4 = 0.08 gives 243, and a \u00b15% 95% confidence interval on accuracy gives 1.96\u00b2 \u00d7 0.25 / 0.05\u00b2 = 385, so RQ4 needs 385."),
+  ...Label("Table 3", "Sample Size Method, Parameters and Achieved N"),
+  table(["RQ", "Method", "Key parameters", "Minimum N", "Achieved N"], [
+    ["RQ1", "Power, chi-square test", "\u03b1 = .05, power = .80, w = 0.10, df = 9", "1,565", "1,645 reviews with an aspect"],
+    ["RQ2", "Power, one-way ANOVA", "\u03b1 = .05, power = .80, f = 0.10, k = 5", "1,199", "35,294"],
+    ["RQ3", "Power, paired t-test", "\u03b1 = .05, power = .80, dz = 0.30", "90", "100 pairs"],
+    ["RQ4", "Power (McNemar) and CI", "\u03c8 = 0.20, \u03b4 = 0.08; Z = 1.96, e = 0.05, p = 0.50", "385", "400"],
+  ], [700, 2100, 3260, 1300, 2000]),
+  Note("Final sample size N = max(1,565, 1,199, 90, 385) = 1,565. Every question met its minimum. CI = confidence interval."),
+  P("The collected volume follows from these minimums. The 2,000-review study sample exceeds the largest requirement (1,565 for RQ1) with a margin for reviews that name no aspect, which proved necessary because 355 sampled reviews named none; the 400-review test set exceeds the 385 needed for a ±5% interval on accuracy; and the full 35,294 reviews were used for RQ2 because they were already collected and analysing them costs nothing extra."),
+];
+
+// ------------------------------------------------------------------------------ literature
+const fLit = [
+  H1("Literature Review"),
+  H2("Search Approach"),
+  P("Sources were searched in Google Scholar, the ACL Anthology, IEEE Xplore, ScienceDirect, SpringerLink, PubMed and the proceedings of NeurIPS and AAAI, using the keywords \u201capp review mining\u201d, \u201caspect-based sentiment analysis\u201d, \u201ccode-mixed Hindi English sentiment\u201d, \u201cLLM text annotation\u201d, \u201cretrieval-augmented generation\u201d, \u201challucination\u201d, \u201cLLM-as-a-judge\u201d, \u201cgovernment chatbot\u201d and \u201cpaired sample size\u201d. Sources were included if they were peer-reviewed or authoritative reports, addressed a business or technical aspect of one research question, and were verifiable at their publisher. Eighteen sources were retained, including deep learning and agentic LLM work; Table 4 compares the fourteen most relevant, and its last column links each source to the research questions and the design decision it supports."),
+  ...Label("Table 4", "Literature Comparison Matrix"),
+  table(["Author (Year)", "Domain", "Dataset", "Method", "Findings", "RQ linkage (decision supported)"], [
+    ["Guzman & Maalej (2014)", "App reviews", "7 apps, App Store and Google Play", "Collocations, lexicon sentiment, topic models", "Feature-level sentiment is informative", "RQ1: motivates aspect-level analysis"],
+    ["Genc-Nayebi & Abran (2017)", "App-review mining", "Systematic review of studies", "Literature review", "Field focuses on whole-review classification", "RQ1, RQ4: gap in aspect and multilingual work"],
+    ["Hassan et al. (2018)", "Developer replies (business)", "Free Google Play apps", "Empirical study", "Replying is associated with rating increases", "RQ3: value of replying"],
+    ["Jain et al. (2023)", "Indian government app", "Aarogya Setu reviews", "Hybrid aspect-based analysis", "Identifies user-experience factors", "RQ1: closest prior study; one app, English"],
+    ["Hutto & Gilbert (2014)", "Social-media sentiment", "Tweets, reviews, news", "Rule-based lexicon (VADER)", "Strong on English social text", "RQ4: lexicon baseline"],
+    ["Barbieri et al. (2022)", "Multilingual sentiment", "About 198M tweets, 8 languages", "XLM-R further trained on tweets", "Strong multilingual baseline", "RQ4: transformer baseline"],
+    ["Conneau et al. (2020)", "Multilingual deep learning", "CommonCrawl text in 100 languages", "Transformer pretraining (XLM-R)", "One model handles many languages, including Hindi", "RQ4: basis of the XLM-R baseline"],
+    ["Patwa et al. (2020)", "Code-mixed sentiment", "20k Hinglish tweets", "Shared task overview", "Best Hinglish F1 about 0.75", "RQ4: why Hinglish is hard"],
+    ["Gilardi et al. (2023)", "LLM annotation", "6,183 tweets and news items", "Zero-shot ChatGPT", "Beats crowd workers on annotation", "RQ4: case for an LLM classifier"],
+    ["Zhang et al. (2024)", "LLMs for sentiment", "Multiple sentiment tasks", "LLMs vs fine-tuned models", "LLMs match fine-tuned models only on simple tasks", "RQ4: advantage must be tested"],
+    ["Yao et al. (2023)", "Agentic LLMs", "Question answering and decision tasks", "Reasoning interleaved with tool use (ReAct)", "Tool use reduces hallucination and raises task success", "RQ3, RQ4: retrieve-then-draft agent design"],
+    ["Lewis et al. (2020)", "Knowledge-intensive NLP", "Open-domain question answering", "Retrieval-augmented generation", "Retrieval improves factuality", "RQ3: grounding method"],
+    ["Ji et al. (2023)", "Natural language generation", "Survey", "Hallucination taxonomy", "Models produce unsupported statements", "RQ3: what is measured"],
+    ["Zheng et al. (2023)", "LLM evaluation", "MT-Bench, Chatbot Arena", "LLM-as-a-judge", "Judges agree with humans above 80%, with biases", "RQ3: judge design and validation"],
+  ], [1450, 1300, 1450, 1500, 1830, 1830]),
+  Note("NLP = natural language processing."),
+  Blank(),
+  H2("Synthesis"),
+  P("**Business context: feedback as public-service evidence.** Governments are judged on what they supply (UN DESA, 2024), but citizens judge services by experience, and app reviews are the largest public record of that experience. Responding to reviews is associated with higher ratings (Hassan et al., 2018), and AI-assisted communication with citizens has been proposed for government (Androutsopoulou et al., 2019). Neither line of work measures whether the replies are factually correct, which matters more for a public service than for a commercial app, because a wrong helpline or procedure misleads citizens about their entitlements."),
+  P("**App reviews as evidence of service quality.** Reviews carry actionable information, and feature-level sentiment exposes problems that whole-review sentiment hides (Guzman & Maalej, 2014). The field nevertheless concentrates on classifying whole English reviews (Genc-Nayebi & Abran, 2017), and the only aspect-level study of an Indian government app examined Aarogya Setu alone, in English, during the pandemic (Jain et al., 2023). These studies justify RQ1's aspect-level design but cannot say whether failures differ across services, which RQ2 addresses by comparing five categories over a common period."),
+  P("**Classifying multilingual feedback.** The methods trade transparency against coverage. VADER is transparent and needs no training but cannot read Hindi or Hinglish (Hutto & Gilbert, 2014). XLM-R handles many languages (Barbieri et al., 2022), yet code-mixed Hinglish remains difficult (Patwa et al., 2020), and aspect-based analysis needs labelled data for each domain (Pontiki et al., 2014). LLMs can annotate text better than crowd workers (Gilardi et al., 2023) but only match fine-tuned models on simple sentiment (Zhang et al., 2024). The evidence is mixed, so RQ4 tests the agent against both baselines rather than assuming an advantage, and reports results separately for non-English text."),
+  P("**Deep learning and agentic LLMs.** Both the strong baseline and the agent rest on deep learning. XLM-R is a transformer network pretrained on text in 100 languages (Conneau et al., 2020) and then adapted to sentiment (Barbieri et al., 2022), while the agent's models are much larger transformers used without task-specific training. Agentic systems go further by letting a language model reason over intermediate steps and call tools, such as a search, before answering, which reduces hallucination compared with answering directly (Yao et al., 2023). This study adopts that idea in a constrained form: a fixed graph of analysis, retrieval, drafting and checking steps rather than an open-ended agent, so that each step can be evaluated separately and every reply is approved by a person."),
+  P("**Replying without inventing facts.** LLMs hallucinate (Ji et al., 2023). Retrieval-augmented generation reduces this by grounding generation in retrieved documents (Lewis et al., 2020); such systems are usually scored with reference-based metrics (Es et al., 2024) or LLM judges, whose agreement with people is high but biased (Zheng et al., 2023). RQ3 therefore uses a controlled within-subject comparison and a judge from a different model family from the writer."),
+  P("**Gap.** No study has compared an LLM agent with lexicon and fine-tuned baselines for aspect-level analysis of citizen feedback across several Indian digital public services using comparable periods, multilingual text and human reference labels, or tested whether grounding replies in agencies' own published responses reduces unsupported claims. This study addresses both."),
+];
+
+// ------------------------------------------------------------------------------ data
+const fData = [
+  H1("Data Description"),
+  P("The data are public reviews of eight Government of India apps on the Google Play store (Google, 2026), collected for this study and published as an open dataset (John, 2026)."),
+  H2("Data Sources and Access"),
+  P(`Reviews were collected on October 13, 2026 with the open-source google-play-scraper package from both the English and the Hindi listings of the India store. Every app was observed over the same window, October 1, 2025 to September 30, 2026; apps with more than 5,000 reviews in the window were randomly sampled to 5,000 (seed 42), and the sampling fraction of each app is stored with the data. The two listings did not overlap (0 duplicate review identifiers), and the Hindi listing contributed 3,925 reviews before sampling. Source pages: UMANG (https://play.google.com/store/apps/details?id=in.gov.umang.negd.g2c), DigiLocker (\u2026?id=com.digilocker.android), mAadhaar (\u2026?id=in.gov.uidai.mAadhaarPlus), BHIM (\u2026?id=in.org.npci.upiapp), Aarogya Setu (\u2026?id=nic.goi.aarogyasetu), ABHA (\u2026?id=in.ndhm.phr), mParivahan (\u2026?id=com.nic.mparivahan) and IRCTC Rail Connect (\u2026?id=cris.org.in.prs.ima).`),
+  H2("Data Ingestion, Database Setup and Access"),
+  P("**Ingestion.** A scraper script requests reviews for each app and listing page by page, keeps those inside the window, applies the 5,000-review cap and writes one raw comma-separated values (CSV) file with a dated name; it never overwrites an earlier collection, so the pilot and study collections coexist. A sampling script then writes the study sample and the test set, and each model writes its outputs keyed by review identifier."),
+  P("**Database setup.** Because the data are a fixed research snapshot of about 35,000 rows, the project uses a file-based analytical store rather than a database server. Raw and sampled reviews are stored in CSV; agent outputs in JSON Lines (JSONL, one JavaScript Object Notation record per line) files that are appended one review at a time, so an interrupted batch resumes where it stopped without duplicates; baseline predictions in CSV; and human labels in an Excel workbook. Every file shares review_id as its primary key, so each join is one-to-one. The RAG knowledge base is a vector store of two files: the documents (524 distinct, anonymised official replies, each tagged with its app) and a matrix of their 384-dimensional multilingual sentence embeddings, normalised to unit length so that a dot product gives cosine similarity. Retrieval filters by app before ranking, so one agency's guidance is never offered for another agency's app."),
+  P("**Access.** Analysis scripts read the files with the pandas library through paths defined in a single configuration module; the FastAPI service loads the vector store into memory once and answers requests through a JSON application programming interface (API); and the full dataset is public in the GitHub repository (John, 2026), so any reader can reproduce the analysis without credentials. The only secret, the Groq key, is kept in an environment file excluded from version control."),
+  H2("Dataset Overview and Sampling"),
+  Bullet("**Records and variables:** 35,294 reviews; 12 collected variables plus derived variables (Table 5)."),
+  Bullet("**Time period:** October 1, 2025 to September 30, 2026, identical for all apps; unit of analysis is one review."),
+  Bullet("**Study sample (RQ1, RQ4):** 2,000 reviews of at least five words, stratified by app (about 257 per app; Aarogya Setu contributed all 199 eligible reviews), seed 42."),
+  Bullet("**Reference set (RQ4, aspect validation):** 400 reviews drawn from the study sample, stratified by language (200 English, 200 Hindi, Hinglish or other), labelled by one human annotator."),
+  Bullet("**RQ3 experiment:** 100 actionable negative complaints answered twice by the agent."),
+  P("The sample sizes follow the power analysis (Table 3). Stratifying by app prevents the busiest apps from dominating aspect results, and stratifying the reference set by language ensures that the classifier comparison covers code-mixed text, which is only 12.5% of eligible reviews."),
+  H2("Data Dictionary"),
+  ...Label("Table 5", "Data Dictionary"),
+  table(["Variable", "Definition", "Datatype (unit)", "Allowed values / range", "Missing values", "Role"], [
+    ["review_id", "Google Play review identifier", "String", "UUID", "None", "Key; links all files"],
+    ["app_name", "App reviewed", "Nominal", "8 apps", "None", "Sampling stratum"],
+    ["service_category", "Service type of the app", "Nominal", "5 categories", "None", "IV for RQ2"],
+    ["text", "Review text as written", "String (characters)", "1\u2013500 characters", "1 empty review dropped", "Input to all classifiers"],
+    ["rating", "Star rating", "Ordinal (stars)", "1\u20135", "None", "DV for RQ2; never a model input"],
+    ["thumbs_up", "Helpful votes", "Integer (votes)", "0\u20131,382", "None", "Descriptive only"],
+    ["app_version", "App version at review", "String", "e.g. 3.3.2", "5,880 (16.7%)", "Not used in any test"],
+    ["review_date", "Time posted", "Datetime (IST)", "Oct 1, 2025 \u2013 Sep 30, 2026", "None", "Defines the window"],
+    ["has_dev_reply", "Official reply exists", "Boolean", "True / False", "None", "Descriptive"],
+    ["dev_reply", "Official reply text", "String", "Text", "19,862 (56.3%); structural", "Knowledge base for RAG"],
+    ["n_words (derived)", "Words in the review", "Integer (words)", "1\u2013121", "\u2014", "Eligibility: \u2265 5 words"],
+    ["language (derived)", "Language and script", "Nominal", "English, Hinglish, Hindi, other Indian, other", "\u2014", "Reference-set stratum"],
+    ["primary_aspect (derived)", "Main aspect discussed (agent)", "Nominal", "10 aspects", "Reviews with no aspect excluded from RQ1", "IV for RQ1"],
+    ["primary_negative (derived)", "Aspect discussed negatively", "Binary", "Yes / no", "\u2014", "DV for RQ1"],
+    ["overall_sentiment (derived)", "Predicted sentiment", "Nominal", "Negative, neutral, positive", "\u2014", "Output of each classifier (RQ4)"],
+    ["label_sentiment", "Human reference label", "Nominal", "Negative, neutral, positive", "None (400 of 400)", "Ground truth (RQ4)"],
+    ["groundedness", "Support of the reply's facts", "Ordinal (1\u20135)", "1\u20135", "\u2014", "DV for RQ3"],
+  ], [1700, 1750, 1250, 1650, 1500, 1510]),
+  Note("IV = independent variable; DV = dependent variable; UUID = universally unique identifier; RAG = retrieval-augmented generation; IST = Indian Standard Time. Derived variables are computed by the analysis scripts from the collected variables."),
+  Blank(),
+  H2("Missing Data, Structural Missingness and Generalisability"),
+  P("Missingness in this dataset is mostly structural rather than random, so each type limits interpretation in a different way (Table 6). The missing official replies matter most: 56.3% of reviews have none, and the share depends on the agency's practice rather than on the review, ranging from 0% missing for UMANG to 99.9% for ABHA. Because RQ3 retrieves guidance from these replies, the grounding benefit can be measured only for apps that publish replies; for ABHA, mAadhaar, IRCTC Rail Connect and Aarogya Setu the knowledge base is nearly empty, and the RQ3 result does not generalise to them. Missing app versions (16.7% overall, from 4.0% for UMANG to 29.7% for mAadhaar) prevent any analysis of whether particular releases caused complaints, so version effects are outside the study's claims."),
+  P("Two exclusions also bound the conclusions. The 64.9% of reviews with fewer than five words (\u201cgood\u201d, \u201cnice app\u201d) name no aspect and were excluded from the RQ1 and RQ4 sample, so those findings describe substantive written feedback, which is more negative than the full population (rating and length correlate at \u03c1 = \u2212.57), not every review. RQ2, which uses all 35,294 reviews, is not affected. Finally, reviewers are self-selected Google Play users who chose to write, and apps above 5,000 reviews were sampled down, so results describe the feedback received in the window, not the views of all citizens; per-app sampling fractions are retained so that population-weighted estimates can be produced."),
+  ...Label("Table 6", "Missing and Excluded Data and Their Effect on Interpretation"),
+  table(["Field or exclusion", "Extent", "Type", "Effect on interpretation", "Generalisation limit"], [
+    ["dev_reply (no official reply)", "19,862 (56.3%); 0%\u201399.9% by app", "Structural: reflects agency reply practice", "RQ3 guidance exists mainly for UMANG, mParivahan, BHIM and DigiLocker", "RQ3 applies to apps that publish replies"],
+    ["app_version", "5,880 (16.7%); 4.0%\u201329.7% by app", "Missing at random within app (older clients)", "No release-level analysis", "No claims about specific versions"],
+    ["text", "1 empty review", "Data error", "Dropped; no effect", "None"],
+    ["Reviews < 5 words", "22,923 (64.9%)", "Excluded by design", "RQ1 and RQ4 describe substantive reviews", "Findings skew to more negative, detailed feedback"],
+    ["Apps above 5,000 reviews", "UMANG, IRCTC, BHIM, ABHA, mParivahan, DigiLocker", "Random down-sampling", "Equalises apps in comparisons", "Weights needed for population totals"],
+  ], [1800, 1800, 1800, 2000, 1960]),
+  Blank(),
+  H2("Data Availability"),
+  P("Figure 1 shows the repository layout, and Table 7 previews the study dataset. Raw data are in data/raw/playstore_reviews_2026-10-13_window.csv; processed data (study sample, agent outputs, baseline predictions and reference labels) are in data/processed/."),
+  ...Label("Figure 1", "Repository Structure"),
+  image(FIG("final_repo_structure.png"), 6.0),
+  Note(`Folders of ${REPO} and their contents.`),
+  Blank(),
+  ...Label("Table 7", "Preview of the Review Dataset (First Review per App with Six to Fourteen Words)"),
+  table(["ID", "App", "Category", "Text (truncated)", "Rating", "Date", "Reply"], [
+    ["f83246e8", "ABHA", "health", "thanks for time saving in government hospital very useful app\u2026", "5", "2025-10-01", "No"],
+    ["9c7a5c26", "Aarogya Setu", "health", "Experiencing 'some error logging you in'. Nothing seems to fix it\u2026", "1", "2025-10-02", "No"],
+    ["000f0635", "BHIM", "payments", "please Improve Qr code Scanning. it's very laggy", "3", "2025-10-01", "Yes"],
+    ["f4e60b77", "DigiLocker", "identity_documents", "it should have BIN or TRASH option for recovery of accidentally delete\u2026", "3", "2025-10-01", "Yes"],
+    ["91d896c0", "IRCTC Rail Connect", "transport", "absolutely ridiculous! this app is a blunder!!", "1", "2025-10-02", "No"],
+    ["a610ca1c", "UMANG", "citizen_services", "EPF Bank kyc process to be enabled at the earliest", "5", "2025-10-05", "Yes"],
+    ["395c1858", "mAadhaar", "identity_documents", "app this most popular and government India app", "5", "2025-10-01", "No"],
+    ["d80f8314", "mParivahan", "transport", "Can't view challan,can't create virtual Rc. always error", "2", "2025-10-01", "Yes"],
+  ], [1000, 1300, 1500, 3060, 700, 1100, 700]),
+  Note("Text is reproduced as written, with emoji removed for display; identifiers are the first eight characters."),
+];
+
+// ------------------------------------------------------------------------------ EDA
+const fEDA = [
+  H1("Data Preparation and Exploratory Data Analysis"),
+  H2("Data Cleaning"),
+  P("Table 8 records each cleaning step. Cleaning was deliberately light: the reviews are the citizens' own words, so the text was not stemmed, spell-corrected or translated, which would have removed the code-mixing that RQ4 needs to test. All steps are scripted and reproducible."),
+  ...Label("Table 8", "Data Cleaning Log"),
+  table(["Issue", "Variables affected", "Detection method", "Treatment applied", "Rationale"], [
+    ["Missing values", "text (1), app_version (5,880), dev_reply (19,862)", "Null counts per column", "Empty review dropped; others kept and flagged (Table 6)", "Missingness is structural and informative"],
+    ["Outliers", "thumbs_up (max 1,382), review length (max 121 words)", "Interquartile-range rule; store limit of 500 characters", "Retained", "Genuine values; thumbs_up is descriptive only"],
+    ["Duplicates", "review_id; text", "Duplicate keys across listings; identical texts", "0 duplicate identifiers; 14,582 identical short texts kept", "Identical texts come from different citizens"],
+    ["Uninformative text", "text", "Word count < 5", "Excluded from the study sample; kept for RQ2", "Short reviews name no aspect"],
+    ["Invalid values", "rating", "Range check 1\u20135", "None found", "\u2014"],
+    ["Personal data", "dev_reply", "Pattern match on salutations", "Reviewer names replaced with \u201cUser\u201d", "Privacy"],
+  ], [1400, 2100, 1850, 2100, 1910]),
+  Blank(),
+  H2("Preprocessing: Missing Values, Outliers, Encoding and Scaling"),
+  P("**Missing values** were handled by type (Tables 6 and 8): the one empty review was dropped; missing app versions were kept and the variable was excluded from every test; and missing official replies were treated as structural, so a review without a reply simply contributes no document to the knowledge base. Nothing was imputed, because imputing a reply or a version would invent data. **Outliers** were identified with the interquartile-range rule. Long reviews (up to 121 words, within the store's 500-character limit) and heavily endorsed reviews (up to 1,382 helpful votes) are genuine, so they were retained; neither variable enters a parametric model, and rank-based tests accompany every comparison that involves ratings."),
+  P("**Encoding.** Each categorical variable was encoded for the model that uses it: service category as a five-level grouping factor; the human and predicted sentiment classes as the same three labels (negative, neutral, positive) for every classifier; and aspects as ten binary multi-hot indicators, with “other” as the reference level in the logistic regression. VADER's continuous compound score was converted to classes with the standard ±0.05 thresholds (Hutto & Gilbert, 2014), and star ratings were mapped to a proxy class (1–2 stars negative, 3 neutral, 4–5 positive) only for the secondary check in RQ4. **Scaling.** No numeric feature was standardised, because no distance-based or gradient-trained model uses numeric inputs: ratings stay in their natural one-to-five-star units so that means remain interpretable, and review length is log-scaled only for display. The one scaled representation is the embedding vector, normalised to unit length for retrieval. The text itself was not lower-cased, stemmed or translated, so every classifier sees the citizens' original, code-mixed writing."),
+  H2("Univariate Analysis"),
+  P("The overall mean rating is 3.52 (standard deviation [*SD*] = 1.78), but the distribution is polarised: 53.6% of reviews give five stars and 29.8% give one star, with few in between (Figure 2). Review length is strongly right-skewed: the median review has two words and 64.9% have fewer than five (Figure 3). Because the rating distribution is bimodal, RQ2 is tested with a rank-based test alongside ANOVA."),
+  ...Label("Figure 2", "Distribution of Star Ratings by App"),
+  image(FIG("eda_rating_distribution.png"), 5.6),
+  Note("Share of each app's reviews in the 12-month window at each star rating; n = 35,294."),
+  Blank(),
+  ...Label("Figure 3", "Review Length by App"),
+  image(FIG("eda_review_length.png"), 5.6),
+  Note("Words per review on a logarithmic scale; the dashed line marks the five-word eligibility threshold; boxes show the interquartile range."),
+  Blank(),
+  H2("Bivariate Analysis"),
+  P("Rating is negatively correlated with length (Spearman \u03c1 = \u2212.57) and with helpful votes (\u03c1 = \u2212.24): dissatisfied citizens write more, and other users endorse their complaints. Official reply rates differ by app far more than by rating (Figure 4): UMANG replies to every review and mParivahan to 93.9%, while ABHA (0.1%), mAadhaar (0.3%) and IRCTC Rail Connect (4.3%) almost never reply. Mean rating also differs sharply by service category (Figure 5), from 4.44 for citizen services to 2.65 for transport, which is the relationship RQ2 tests formally."),
+  ...Label("Figure 4", "Official Reply Rate by App"),
+  image(FIG("eda_official_reply_rate.png"), 5.4),
+  Note("Share of each app's reviews that received an official reply from the app's team; n = 35,294."),
+  Blank(),
+  ...Label("Figure 5", "Mean Star Rating by Service Category"),
+  image(FIG("rq3_rating_by_category.png"), 5.4),
+  Note("Points show means with 95% confidence intervals; n = 35,294."),
+  Blank(),
+  H2("Multivariate Analysis"),
+  P("Rating by category and month (Figure 6) reveals two anomalies and one trend. Citizen services (UMANG) held near 4.5 stars until June 2026, then fell to about 3.0 from July as its review volume collapsed; 13% of its official replies from July onward mention a server migration, which is consistent with a service disruption. Payments (BHIM) jumped to 4.36 stars in April 2026 on four times its usual volume (1,394 reviews), a burst typical of in-app prompts or promotions, so RQ2 was re-run without that month. Transport rose steadily from 1.9 to 3.2 stars, partly because IRCTC Rail Connect, which is rated higher than mParivahan, contributes more reviews in later months. Language varies by app as well as by category (Figure 7): between 9.7% (mParivahan) and 19.2% (ABHA) of eligible reviews are in Hindi, Hinglish or another Indian language. The multivariable logistic regression of negativity on all aspects mentioned is reported with RQ1."),
+  ...Label("Figure 6", "Mean Monthly Rating by Service Category"),
+  image(FIG("eda_monthly_rating_by_category.png"), 5.8),
+  Note("Mean star rating per month for each service category, October 2025 to September 2026; n = 35,294."),
+  Blank(),
+  ...Label("Figure 7", "Share of Non-English Reviews by App"),
+  image(FIG("eda_language_mix.png"), 5.4),
+  Note("Eligible reviews (at least five words, n = 12,370); language assigned from the script and a Hinglish word list."),
+  Blank(),
+  ...Label("Table 9", "EDA Insight Summary"),
+  table(["Figure", "What it shows", "Key insight", "Decision"], [
+    ["Figure 2", "Rating distribution", "Polarised; mParivahan 60% one-star", "Report Kruskal-Wallis with ANOVA (RQ2)"],
+    ["Figure 3", "Review length", "65% under five words; longer reviews more negative", "Exclude short reviews from RQ1 sample"],
+    ["Figure 4", "Official reply rates", "0% to 100% by app", "Report RQ3 by guidance availability"],
+    ["Figure 5", "Rating by category", "1.8-star gap between categories", "Test formally in RQ2"],
+    ["Figure 6", "Monthly trends", "UMANG drop from July; BHIM April burst", "Robustness check excluding April"],
+    ["Figure 7", "Language mix", "12.5% non-English", "Language-stratified reference set (RQ4)"],
+  ], [1300, 1900, 3200, 2960]),
+];
+
+// ------------------------------------------------------------------------------ methodology
+const fMethod = [
+  H1("Methodology"),
+  H2("Choice of Models with Justification"),
+  P("The problem combines classification (RQ4, and the aspect labels behind RQ1), inference about group differences (RQ1, RQ2) and a controlled experiment (RQ3). Figure 8 shows the end-to-end pipeline in six stages: data collection, preprocessing, exploratory data analysis (EDA), feature engineering, modelling and deployment. The dashed arrows mark two feedback loops: EDA findings changed the preprocessing (for example, the five-word filter), and results on the pilot development data refined the agent's prompts before the test set was scored."),
+  ...Label("Figure 8", "End-to-End Analytics Pipeline From Data to Deployment"),
+  image(FIG("final_pipeline_stages.png"), 6.5),
+  Note("Box colours mark the stage type, as shown in the legend; solid arrows show the flow of data and dashed arrows feedback loops. All language models are open-weight and served by Groq; CLI = command-line interface."),
+  Blank(),
+  H3("Model 1: VADER Lexicon (Baseline)"),
+  P("A rule-based lexicon (Hutto & Gilbert, 2014): transparent, free and widely used for social text. Its known weakness on non-English text makes it a meaningful lower bound."),
+  H3("Model 2: XLM-RoBERTa Fine-Tuned for Sentiment (Strong Baseline)"),
+  P("A multilingual transformer further trained on tweets and fine-tuned for three-class sentiment (Barbieri et al., 2022). It is the strongest established alternative that can read Hindi and Hinglish."),
+  H3("Model 3: LLM Agent (Proposed)"),
+  P("A graph workflow built with Google's Agent Development Kit. An analyzer (gpt-oss-20b) returns structured sentiment, aspects, severity and language; a routing rule passes only actionable, non-positive complaints on; a retrieval step finds up to four official replies for the same app; a responder (gpt-oss-120b) drafts a reply that may use contact details only from that guidance; and a checker from a different model family (Qwen) rejects unsupported drafts, allowing one redraft before flagging the case for a person. It is chosen because it produces aspects and grounded replies, which neither baseline can, and the literature leaves its classification accuracy open (Zhang et al., 2024). Fine-tuning a classifier was rejected because no labelled domain data exist, and topic modelling was rejected because its topics would need manual mapping to the ten service aspects."),
+  H3("Statistical Models and Assumptions"),
+  P("RQ1 uses a chi-square test of independence with a logistic regression of negativity on aspect indicators, whose odds ratios act as feature importance. RQ2 uses Welch's ANOVA with the Kruskal-Wallis test and Tukey's honestly significant difference (HSD) test. RQ3 uses a paired *t*-test with the Wilcoxon signed-rank test and McNemar's exact test. RQ4 uses McNemar's test with Holm correction and a bootstrap confidence interval (2,000 resamples) for the macro-F1 difference. Assumptions (independent reviews; expected counts of at least five; unequal variances handled by Welch's correction; approximately normal paired differences) were checked, and rank-based alternatives are reported throughout."),
+  H2("Workflows by Research Question"),
+  P("Figure 9 shows the step-by-step workflow for each question. In each, the data step and the measurement step are separated from the test step, so the same agent outputs feed RQ1 and RQ4 without being re-generated."),
+  ...Label("Figure 9", "Analytical Workflow for Each Research Question"),
+  image(FIG("final_rq_workflows.png"), 6.3),
+  Note("Darker boxes are the statistical test and validation steps."),
+  Blank(),
+  H2("Reference Labelling Procedure"),
+  P("The 400 reference reviews were labelled by one human annotator (the researcher) using a written codebook that defines three sentiment classes, relevance, ten aspects plus none, and five language classes, with worked examples and tie-break rules (for example, the aspect that stops the citizen using the service takes priority). The annotator saw only the review text and app name, never the star rating or any model output. The resulting labels contain 275 negative, 94 positive and 31 neutral reviews. Inter-rater reliability was not measured because a second independent annotation was not completed; this is reported as a limitation. AI-generated draft labels produced during the project were not used as reference labels."),
+  H2("Features and Leakage Control"),
+  P("The classifiers take raw review text, as their designs intend; engineered features serve the statistical models and the sampling (Table 10). Leakage is avoided in four ways: the star rating is never an input to any classifier; the annotator labelled without seeing ratings or model outputs; the retrieval step excludes the official reply to the complaint being answered; and the reference labels were fixed before any model was scored against them."),
+  ...Label("Table 10", "Feature Set and Usage"),
+  table(["Feature", "Original / engineered", "Type", "Reason for inclusion", "Used in"], [
+    ["Review text", "Original", "Text", "Primary input", "VADER, XLM-R, agent"],
+    ["App name", "Original", "Nominal", "Context for the agent; sampling stratum", "Agent prompt; sampling"],
+    ["Service category", "Engineered from app", "Nominal", "Grouping variable", "RQ2"],
+    ["Primary aspect", "Engineered by the agent", "Nominal", "Explanatory variable", "RQ1 chi-square"],
+    ["Aspect indicators", "Engineered (multi-hot)", "Binary \u00d7 10", "All aspects mentioned", "RQ1 logistic regression"],
+    ["Word count", "Engineered", "Integer", "Eligibility filter (\u2265 5 words)", "Sampling"],
+    ["Language", "Engineered (script and word rules)", "Nominal", "Stratify reference set; subgroup results", "Sampling; RQ4"],
+    ["Retrieved guidance", "Engineered (embedding search)", "Text (top 4)", "Grounds the reply", "RQ3 responder"],
+  ], [1700, 1900, 1500, 2400, 1860]),
+  Blank(),
+  H2("Data Splitting and Validation Approach"),
+  P("No model in this study is trained on the review data: VADER is rule-based, XLM-R is used as released, and the agent is prompted without examples. Splitting therefore separates the data used to *design* the system from the data used to *test* it, in three partitions:"),
+  Bullet("**Development set:** the earlier pilot collection (937 analysed reviews), on which the prompts, aspect list, routing rule and retrieval threshold were designed and the RQ3 experiment was run. It plays the role of a training set."),
+  Bullet("**Study sample:** 2,000 reviews from the 12-month window, stratified by app, which supplied the RQ1 analysis and a secondary check against star ratings."),
+  Bullet("**Held-out test set:** the 400 human-labelled reviews, stratified by language. Labels were fixed before any model was scored, and no prompt was changed after scoring."),
+  P("Because the pilot and the study collections overlap in time, 35 test reviews had also appeared in the pilot; excluding them leaves the results unchanged (agent accuracy .929 and macro-F1 .831 on 365 reviews, against .928 and .833 on all 400). For retrieval, the knowledge base and the evaluated complaints are separated case by case: the official reply to the complaint being answered is excluded, so the agent cannot copy the real answer. Uncertainty is quantified by bootstrap resampling (2,000 resamples) rather than cross-validation. Table 11 defines the metrics."),
+  ...Label("Table 11", "Evaluation Metrics and Formulae"),
+  table(["Metric", "Formula", "Interpretation", "Used for"], [
+    ["Accuracy", "(correct predictions) / N", "Share of reviews labelled correctly", "RQ4; aspect validation"],
+    ["Precision (class c)", "TP\u1d9c / (TP\u1d9c + FP\u1d9c)", "How often a predicted c is right", "RQ4"],
+    ["Recall (class c)", "TP\u1d9c / (TP\u1d9c + FN\u1d9c)", "How many true c are found", "RQ4"],
+    ["F1-score", "2PR / (P + R); macro-F1 = mean over 3 classes", "Primary metric (classes imbalanced)", "RQ4"],
+    ["Cohen's \u03ba", "(p\u2092 \u2212 p\u2091) / (1 \u2212 p\u2091)", "Agreement beyond chance", "RQ4; aspect validation"],
+    ["McNemar \u03c7\u00b2", "(|b \u2212 c| \u2212 1)\u00b2 / (b + c)", "Paired difference in errors", "RQ3, RQ4"],
+    ["Cram\u00e9r's V", "\u221a[\u03c7\u00b2 / (n(min(r, c) \u2212 1))]", "Strength of association (0\u20131)", "RQ1"],
+    ["\u03b7\u00b2", "F\u00b7df\u2081 / (F\u00b7df\u2081 + df\u2082)", "Share of rating variance explained", "RQ2"],
+    ["Cohen's d_z", "mean(D) / SD(D)", "Size of the paired difference", "RQ3"],
+  ], [1700, 3000, 2900, 1760]),
+  Note("TP, FP and FN are true positives, false positives and false negatives; b and c are the reviews only one classifier labels correctly; D is the paired difference."),
+];
+
+// ------------------------------------------------------------------------------ results
+const fResults = [
+  H1("Results"),
+  H2("RQ1: Service Aspect and Negative Sentiment"),
+  P("The agent analysed all 2,000 sampled reviews, of which 1,645 named an aspect. Negativity was strongly associated with the aspect, \u03c7\u00b2(9, *N* = 1,645) = 509.83, *p* < .001, Cram\u00e9r's *V* = 0.56, so *H*\u2080 is rejected. Login and OTP reviews were 99.0% negative, application bugs 97.1% and server downtime 96.3%, while usability comments were only 38.9% negative (Figure 10). In the logistic regression (pseudo-*R*\u00b2 = .31; Table 12), mentioning a login problem multiplied the odds of a negative review by 30.2, an application bug by 10.6 and downtime by 8.9, while a usability mention cut them to 0.25."),
+  ...Label("Figure 10", "Share of Reviews Discussing Each Aspect Negatively (RQ1)"),
+  image(FIG("rq2_negative_share_by_aspect.png"), 5.6),
+  Note("Points show the share; bars show 95% Wilson confidence intervals; n = 1,645 reviews."),
+  Blank(),
+  ...Label("Table 12", "Logistic Regression of Negative Sentiment on Aspects Mentioned (RQ1)"),
+  table(["Aspect", "Odds ratio", "95% CI", "p"], [
+    ["Login, OTP, authentication", "30.25", "[11.99, 76.32]", "< .001"],
+    ["Application update and bugs", "10.56", "[4.95, 22.54]", "< .001"],
+    ["Server downtime and performance", "8.93", "[5.79, 13.79]", "< .001"],
+    ["Aadhaar, KYC, linking", "3.71", "[1.58, 8.73]", ".003"],
+    ["Customer support and grievance", "3.58", "[1.06, 12.06]", ".040"],
+    ["Payments and transactions", "1.85", "[1.14, 3.00]", ".013"],
+    ["Documents and certificates", "1.11", "[0.70, 1.74]", ".667"],
+    ["Privacy and security", "0.87", "[0.47, 1.61]", ".660"],
+    ["UI and usability", "0.25", "[0.18, 0.35]", "< .001"],
+  ], [4000, 1500, 2160, 1700]),
+  Note("Reference category: reviews mentioning only \u201cother\u201d aspects; n = 1,645; pseudo-R\u00b2 = .314. CI = confidence interval; OTP = one-time password; KYC = know your customer; UI = user interface."),
+  Blank(),
+  P("**Validation against human labels.** On the 400 human-labelled reviews, the same test using the human aspect labels gave \u03c7\u00b2(8, *N* = 392) = 228.05, *p* < .001, *V* = 0.76, confirming the association independently of the agent: login, bug and privacy reviews were 100% negative and usability 69.6%. The agent's aspect labels, however, matched the human aspect on only 59.2% of 336 comparable reviews (\u03ba = .52), below the 0.80 target. The agent was reliable for downtime (recall .94), login (.87) and payments (.83) but often labelled bugs as downtime (20 cases) and general praise as usability (25 cases). The direction of the RQ1 finding is therefore robust, but per-aspect percentages from the agent should be read as approximate."),
+  H2("RQ2: Satisfaction Across Service Categories"),
+  P("Mean ratings differed across categories: citizen services 4.44, health 4.30, identity and documents 3.59, payments 3.35 and transport 2.65 (Figure 5). Welch's *F* = 1,659.73, the classic ANOVA *F*(4, 35289) = 1,412.24 and the Kruskal-Wallis *H*(4) = 4,400.09 were all significant at *p* < .001, and all ten Tukey HSD comparisons were significant. The effect is large: \u03b7\u00b2 = (1,412.24 \u00d7 4) / (1,412.24 \u00d7 4 + 35,289) = .138. *H*\u2080 is rejected. Excluding the April 2026 payments burst strengthened the result (*F*(4, 33895) = 1,503.35, \u03b7\u00b2 = .151) and lowered the payments mean to 2.96, leaving the category ranking unchanged. On the earlier pilot collection, where apps covered different periods, \u03b7\u00b2 was only .026, which shows that the common window was necessary for a fair comparison."),
+  H2("RQ3: Grounded Versus Ungrounded Replies"),
+  P("On 100 complaints, mean judged groundedness was 4.29 with retrieved guidance and 3.24 without it; the paired difference of 1.05 (*SD* = 1.09) gives *t*(99) = 9.67, *p* < .001, *d*z = 0.97, and the Wilcoxon test agrees (Table 13). Replies with at least one unsupported claim fell from 87% to 44% (McNemar exact *p* < .001). *H*\u2080 is rejected. The gain came entirely from complaints for which guidance existed (4.63 against 3.28); where none was retrieved, both conditions scored 3.09 (Figure 11). The groundedness target of 4.0 was met; the target of 70% of replies with no unsupported claim was not (56%)."),
+  ...Label("Table 13", "Paired Results, RAG Versus No RAG (RQ3, n = 100)"),
+  table(["Measure", "With RAG", "Without RAG", "Test"], [
+    ["Groundedness (1\u20135)", "4.29", "3.24", "t(99) = 9.67, p < .001, dz = 0.97"],
+    ["Helpfulness (1\u20135)", "3.73", "2.38", "t(99) = 10.46, p < .001, dz = 1.05"],
+    ["Unsupported claims per reply", "0.59", "1.34", "t(99) = \u22127.36, p < .001"],
+    ["Replies with \u2265 1 unsupported claim", "44%", "87%", "McNemar exact p < .001"],
+  ], [3000, 1400, 1500, 3460]),
+  Blank(),
+  ...Label("Figure 11", "Paired Difference in Groundedness per Complaint (RQ3)"),
+  image(FIG("rq4_groundedness_difference.png"), 5.4),
+  Note("Groundedness with RAG minus groundedness without RAG for each of 100 complaints, scored 1\u20135 by the judge model; positive values favour RAG."),
+  Blank(),
+  H2("RQ4: Agent Versus Baselines"),
+  P("**The LLM agent is the best model.** Against the 400 human reference labels, the agent reached accuracy .928 and macro-F1 .833, ahead of XLM-R (.848, .693) and far ahead of VADER (.472, .450; Table 14). McNemar's test with Holm correction separated the agent from VADER (196 reviews correct only for the agent against 14 only for VADER; \u03c7\u00b2(1) = 156.00, *p* < .001; macro-F1 difference +.38, 95% CI [.31, .45]) and from XLM-R (44 against 12; \u03c7\u00b2(1) = 17.16, *p* < .001; difference +.14, 95% CI [.06, .21]). *H*\u2080 is rejected for both comparisons. The advantage was largest on non-English reviews, where the agent's macro-F1 was .835 against .651 for XLM-R and .298 for VADER. Most remaining errors involved the neutral class (Figure 12): 10 of 31 neutral reviews were labelled negative. Both pre-set targets were met. Scored against star ratings instead of human labels (*n* = 2,000), the agent's accuracy was only .808, which confirms that stars are an unreliable proxy for the sentiment of the text."),
+  ...Label("Table 14", "Model Performance Against Human Reference Labels (RQ4, n = 400)"),
+  table(["Model", "Accuracy", "Macro-F1", "Cohen's \u03ba", "Macro-F1, English (n = 195)", "Macro-F1, non-English (n = 205)"], [
+    ["VADER", "0.472", "0.450", "0.257", "0.534", "0.298"],
+    ["XLM-R", "0.848", "0.693", "0.680", "0.755", "0.651"],
+    ["LLM agent", "0.928", "0.833", "0.841", "0.786", "0.835"],
+  ], [1500, 1200, 1200, 1300, 2080, 2080]),
+  Note("Language groups follow the human language label. All models were evaluated on the same 400 reviews without training on them."),
+  Blank(),
+  ...Label("Figure 12", "Confusion Matrix of the Agent Against Human Labels (RQ4)"),
+  image(FIG("rq1_gold_agent_confusion.png"), 3.8),
+  Note("Rows show the human label and columns the agent's prediction; n = 400."),
+  Blank(),
+  P("**Development versus test results.** Table 15 reports each model separately on the development, study and test partitions, which takes the place of training and test accuracy for models that are not trained on these data. On the two star-proxy partitions every model scores lower, because star ratings often disagree with the text, and the agent and XLM-R are close in macro-F1 (.601 and .603 on the study sample). On human labels the agent is clearly best. On the same star-proxy measure, the agent scores slightly higher on the new study sample than on the development data it was designed on (accuracy .808 against .783), so there is no sign that designing its prompts on the pilot over-fitted them."),
+  ...Label("Table 15", "Separated Evaluation on Development, Study and Held-Out Test Partitions"),
+  table(["Model", "Development: pilot, star proxy (n = 937), accuracy / macro-F1", "Study sample: star proxy (n = 2,000), accuracy / macro-F1", "Held-out test: human labels (n = 400), accuracy / macro-F1"], [
+    ["VADER", ".550 / .462", ".570 / .481", ".472 / .450"],
+    ["XLM-R", ".774 / .588", ".784 / .603", ".848 / .693"],
+    ["LLM agent (best)", ".783 / .571", ".808 / .601", ".928 / .833"],
+  ], [1800, 2520, 2520, 2520]),
+  Note("Star proxy: 1–2 stars negative, 3 neutral, 4–5 positive. Only the test partition has human labels, so it is the basis of the RQ4 decision."),
+];
+
+// ------------------------------------------------------------------------------ discussion
+const fDiscussion = [
+  H1("Discussion"),
+  H2("Technical Interpretation"),
+  P("The results support the agentic design on three of four measures. The agent read sentiment more accurately than both established methods, and its advantage was largest on exactly the text that motivated the study, Hindi and Hinglish reviews, which is consistent with the literature's finding that code-mixed text defeats lexicons and challenges multilingual transformers (Patwa et al., 2020). This partly answers the open question raised by Zhang et al. (2024): on short, noisy, multilingual service reviews, a prompted LLM outperformed a fine-tuned model. Retrieval made replies substantially more grounded, in line with Lewis et al. (2020), but only when relevant guidance existed, and 44% of grounded replies still contained at least one unsupported claim, so the checker step and human approval remain necessary (Ji et al., 2023). The weakest component was aspect labelling: the agent separated broad failure types well but confused related categories (bugs and downtime; praise and usability), which is the classic difficulty of aspect-based analysis without domain training data (Pontiki et al., 2014)."),
+  H2("Business Implications"),
+  P("Table 16 translates the findings into actions for the agencies and teams that run these services."),
+  ...Label("Table 16", "Business Implications by Stakeholder"),
+  table(["Finding", "Stakeholder", "Implication and action"], [
+    ["Login/OTP, bugs and downtime are almost always negative (RQ1)", "Product and engineering teams (NeGD, NIC, CRIS, NPCI)", "Prioritise authentication reliability, release testing and peak-load capacity; these drive dissatisfaction more than interface design"],
+    ["Usability comments are mostly positive (RQ1)", "Design teams", "Interface redesign is a lower priority than reliability"],
+    ["Transport (2.65) and payments rate lowest (RQ2)", "Ministry-level digital governance and policy analysts", "Direct monitoring and investment to transport apps; track category scores monthly in the same window"],
+    ["UMANG fell from 4.5 to 3.0 stars after June 2026 (EDA)", "UMANG operations", "Monthly sentiment tracking would have flagged the disruption within weeks"],
+    ["Grounding halves unsupported claims (RQ3)", "Citizen-support teams", "Use RAG drafts with human approval; publish verified answers to frequently asked questions so that apps with no replies gain a knowledge base"],
+    ["Agent beats baselines, especially on Hindi and Hinglish (RQ4)", "Agencies serving non-English users", "Automated triage is accurate enough to route complaints; keep human review for aspect-level reports"],
+  ], [3000, 2400, 3960]),
+  Blank(),
+  H2("Synthesis of Findings"),
+  P("Table 17 consolidates the hypothesis tests and targets. All four null hypotheses were rejected at the 5% level. Five of the seven pre-set targets were met; the two that were not (agent aspect accuracy and the share of fully grounded replies) both point to the same conclusion: the system is ready to triage feedback and draft replies, but not to publish aspect statistics or replies without human review."),
+  ...Label("Table 17", "Hypothesis Decisions and Targets"),
+  table(["RQ", "Test result", "Decision on H\u2080", "Target", "Met?"], [
+    ["RQ1", "\u03c7\u00b2(9) = 509.83, p < .001, V = 0.56 (human labels: V = 0.76)", "Rejected", "V \u2265 0.10; aspect accuracy \u2265 0.80", "Yes; no (0.59)"],
+    ["RQ2", "Welch F = 1,659.73, p < .001, \u03b7\u00b2 = .138", "Rejected", "\u03b7\u00b2 \u2265 0.01", "Yes"],
+    ["RQ3", "t(99) = 9.67, p < .001, dz = 0.97", "Rejected", "Groundedness \u2265 4.0; \u2265 70% claim-free", "Yes (4.29); no (56%)"],
+    ["RQ4", "McNemar p < .001 vs both baselines", "Rejected", "Macro-F1 \u2265 0.75; not worse than XLM-R", "Yes (0.833); yes (+0.14)"],
+  ], [700, 3100, 1300, 2560, 1700]),
+];
+
+// ------------------------------------------------------------------------------ implementation, limitations, conclusion
+const fImpl = [
+  H1("Implementation"),
+  H2("Deployment"),
+  P("The system is deployed as three layers. A FastAPI service exposes the agent through an endpoint that accepts a review and returns the analysis, the retrieved guidance, the draft reply, the checker's verdict and whether a person must review it; a React web application lets a support officer paste a review and see each step. Batch analysis runs from the command line, resumes where it stopped and halts cleanly when the model provider's daily limit is reached. Every reply is a draft: the routing rule never sends anything to a citizen."),
+  H2("System Integration"),
+  P("The agent is exposed through a single API call (POST /api/analyze) that takes the review text and app name and returns one JSON record: language, sentiment, aspects, severity, the team the complaint should be routed to, the retrieved guidance with its sources, the draft reply and the checker's verdict. Because the contract is plain JSON, the service can sit between an agency's existing systems without changing them: a scheduled job can pull new reviews from the Google Play Developer API, pass each one through the endpoint, and write the result to the agency's ticketing or grievance system, using the routing field to assign the ticket. An approved reply can then be posted back through the same Developer API, and the JSONL outputs feed monthly dashboards of sentiment by aspect and category. Further endpoints return random reviews, stored results and summary statistics for the web application."),
+  H2("Benefits to Users"),
+  Bullet("**Citizens** receive a faster reply that cites real contact points and procedures rather than a template or no reply, in apps where many reviews now go unanswered."),
+  Bullet("**Support officers** start from a checked draft with its sources shown, so reviewing a reply takes less time than writing one, and unsupported drafts are flagged for them."),
+  Bullet("**Product and engineering teams** see which aspects drive dissatisfaction, in every language citizens use, instead of an average star rating."),
+  Bullet("**Policy analysts** can compare categories and track monthly changes, such as the UMANG decline after June 2026, within weeks rather than after a formal survey."),
+  H2("Example Use Case"),
+  P("A citizen posts a one-star review of mParivahan in Hindi: “बहुत ही ख़राब App है ज़रूरत के समय काम नहीं करता है” (“A very bad app; it does not work when it is needed”). VADER cannot read Devanagari script. The agent recorded the language as Hindi, the sentiment as negative, the aspect as server downtime and performance with severity 3 of 5, and marked it actionable. Routing passed it to drafting, retrieval found four past mParivahan replies, and the responder drafted: “We’re sorry the app isn’t working when you need it. Please ensure you have the latest version from Google Play, then clear app data and cache and restart your device. If the problem persists, email helpdesk-mparivahan@gov.in with your registered mobile number and device details.” The judge rated this draft 5 of 5 for groundedness with no unsupported claim. Without retrieval, the same model blamed “temporary server overload” and claimed the team was “monitoring the service”, two statements no official source supports (groundedness 2). In deployment, a support officer would see the draft beside its sources, approve it and post it, and the review would count toward the month's downtime figures for transport."),
+  H2("Algorithmic Steps"),
+  Bullet("**Collect** reviews for a fixed window from the English and Hindi store listings, cap each app at 5,000 and record sampling fractions."),
+  Bullet("**Build the knowledge base** from official replies with personal names removed, embedded with a multilingual sentence model (384 dimensions)."),
+  Bullet("**Analyse** each review into a fixed schema (relevance, language, sentiment, aspects, severity, search query); malformed outputs are retried."),
+  Bullet("**Route** only relevant, actionable, non-positive reviews to reply drafting."),
+  Bullet("**Retrieve** up to four official replies for the same app with cosine similarity \u2265 0.35, excluding the review's own reply."),
+  Bullet("**Draft** a reply that may cite contact details only from the retrieved guidance."),
+  Bullet("**Check** the draft with a model from a different family; allow one redraft, then flag for a person."),
+  H2("Human and Machine Requirements"),
+  P("The full pipeline ran on a Windows laptop (no graphics card) using the free tier of Groq, which allows about 200,000 tokens per model per day; analysing the 2,000-review sample took several daily runs. The baselines and embeddings run locally. Reproduction needs Python 3.12, the packages in requirements.txt and a free Groq key; Appendix A lists the commands. On the human side, an agency deployment needs a support officer to approve each reply, an analyst to review monthly aspect summaries, and periodic re-labelling of a reference sample (about three hours per 400 reviews) to monitor accuracy."),
+  H1("Limitations and Next Steps"),
+  P("The limitations fall into data limitations (the first, fourth and fifth points), which restrict how far the findings generalise beyond Google Play reviewers of these apps in this window, and model limitations (the second, third and sixth), which restrict how far the agent's outputs can be used without human review. None of them reverses a hypothesis decision, but they shape how each result should be read."),
+  Bullet("**Single human annotator.** Reference labels came from one annotator; inter-rater reliability was not measured, so some label noise cannot be ruled out. Next step: a second independent annotation of at least 100 reviews and a reported Cohen's \u03ba."),
+  Bullet("**Agent aspect accuracy below target.** Aspect labels matched the human label 59% of the time. Next step: add worked examples for the confused categories to the prompt, or a two-stage aspect classifier, and re-validate."),
+  Bullet("**RQ3 on pilot data with an unvalidated judge.** The grounding experiment used 100 complaints from the earlier collection and an LLM judge whose ratings were not compared with human ratings. Next step: repeat on the 12-month data after auditing contact details in the knowledge base, and have a person rate 30 pairs."),
+  Bullet("**Thin guidance for some apps.** Apps that rarely reply (ABHA, mAadhaar, IRCTC Rail Connect) give the retriever nothing to use. Next step: add verified FAQ content from the agencies."),
+  Bullet("**Population and platform.** Results describe self-selected Google Play reviewers with at least five words of feedback, in one 12-month window. Next step: weight by sampling fractions and add iOS reviews."),
+  Bullet("**Hosted models.** The agent depends on a hosted service whose models change. Next step: pin model versions and log them with each result."),
+  H1("Conclusion"),
+  P("Citizen reviews of India's digital public services contain clear, measurable signals about what fails and where. Reliability failures (login, bugs and downtime) drive negative feedback far more than interface design, and satisfaction varies sharply by service category, with transport lowest. An agentic LLM pipeline built from open-weight models read this multilingual feedback more accurately than a lexicon and a fine-tuned transformer, especially in Hindi and Hinglish, and grounding its replies in agencies' own published answers roughly halved the replies that contained an unsupported claim. The weaker aspect labels and the remaining unsupported claims set the boundary of responsible use: the system should triage feedback and draft replies for human approval, not replace the people who answer citizens."),
+  H2("Use of AI Tools"),
+  P("An AI assistant (Anthropic, 2026) was used to support programming and to help draft and edit this report. The reference labels were assigned by the author, and AI-generated draft labels were not used as reference labels. The author reviewed all content and is responsible for it."),
+];
+
+const fRefs = [
+  PB(),
+  H1("References"),
+  Ref("Androutsopoulou, A., Karacapilidis, N., Loukis, E., & Charalabidis, Y. (2019). Transforming the communication between citizens and government through AI-guided chatbots. *Government Information Quarterly, 36*(2), 358\u2013367. https://doi.org/10.1016/j.giq.2018.10.001"),
+  Ref("Anthropic. (2026). *Claude* (Opus 5.5) [Large language model]. https://claude.ai"),
+  Ref("Barbieri, F., Espinosa Anke, L., & Camacho-Collados, J. (2022). XLM-T: Multilingual language models in Twitter for sentiment analysis and beyond. In *Proceedings of the Thirteenth Language Resources and Evaluation Conference* (pp. 258\u2013266). European Language Resources Association. https://aclanthology.org/2022.lrec-1.27/"),
+  Ref("Cohen, J. (1988). *Statistical power analysis for the behavioral sciences* (2nd ed.). Lawrence Erlbaum Associates."),
+  Ref("Conneau, A., Khandelwal, K., Goyal, N., Chaudhary, V., Wenzek, G., Guzmán, F., Grave, E., Ott, M., Zettlemoyer, L., & Stoyanov, V. (2020). Unsupervised cross-lingual representation learning at scale. In *Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics* (pp. 8440–8451). Association for Computational Linguistics. https://doi.org/10.18653/v1/2020.acl-main.747"),
+  Ref("Connor, R. J. (1987). Sample size for testing differences in proportions for the paired-sample design. *Biometrics, 43*(1), 207\u2013211. https://doi.org/10.2307/2531961"),
+  Ref("Es, S., James, J., Espinosa-Anke, L., & Schockaert, S. (2024). RAGAs: Automated evaluation of retrieval augmented generation. In *Proceedings of the 18th Conference of the European Chapter of the Association for Computational Linguistics: System Demonstrations* (pp. 150\u2013158). Association for Computational Linguistics. https://aclanthology.org/2024.eacl-demo.16/"),
+  Ref("Genc-Nayebi, N., & Abran, A. (2017). A systematic literature review: Opinion mining studies from mobile app store user reviews. *Journal of Systems and Software, 125*, 207\u2013219. https://doi.org/10.1016/j.jss.2016.11.027"),
+  Ref("Gilardi, F., Alizadeh, M., & Kubli, M. (2023). ChatGPT outperforms crowd workers for text-annotation tasks. *Proceedings of the National Academy of Sciences, 120*(30), Article e2305016120. https://doi.org/10.1073/pnas.2305016120"),
+  Ref("Google. (2026). *Google Play* [Online app store]. https://play.google.com"),
+  Ref("Guzman, E., & Maalej, W. (2014). How do users like this feature? A fine grained sentiment analysis of app reviews. In *2014 IEEE 22nd International Requirements Engineering Conference* (pp. 153\u2013162). IEEE. https://doi.org/10.1109/RE.2014.6912257"),
+  Ref("Hassan, S., Tantithamthavorn, C., Bezemer, C.-P., & Hassan, A. E. (2018). Studying the dialogue between users and developers of free apps in the Google Play Store. *Empirical Software Engineering, 23*(3), 1275\u20131312. https://doi.org/10.1007/s10664-017-9538-9"),
+  Ref("Hutto, C., & Gilbert, E. (2014). VADER: A parsimonious rule-based model for sentiment analysis of social media text. *Proceedings of the International AAAI Conference on Web and Social Media, 8*(1), 216\u2013225. https://ojs.aaai.org/index.php/ICWSM/article/view/14550"),
+  Ref("Jain, A., Dey, L., Dasgupta, T., & Naskar, A. (2023). Factors affecting user experience of contact tracing app during COVID-19: An aspect-based sentiment analysis of user-generated review. *Behaviour & Information Technology, 42*(2), 249\u2013264. https://doi.org/10.1080/0144929X.2022.2139758"),
+  Ref("Ji, Z., Lee, N., Frieske, R., Yu, T., Su, D., Xu, Y., Ishii, E., Bang, Y. J., Madotto, A., & Fung, P. (2023). Survey of hallucination in natural language generation. *ACM Computing Surveys, 55*(12), 1\u201338. https://doi.org/10.1145/3571730"),
+  Ref("John, R. M. (2026). *Digital India app reviews, October 2025 to September 2026* [Data set]. GitHub. https://github.com/rohanmanijohn/digital-india-agent"),
+  Ref("Lewis, P., Perez, E., Piktus, A., Petroni, F., Karpukhin, V., Goyal, N., K\u00fcttler, H., Lewis, M., Yih, W., Rockt\u00e4schel, T., Riedel, S., & Kiela, D. (2020). Retrieval-augmented generation for knowledge-intensive NLP tasks. *Advances in Neural Information Processing Systems, 33*, 9459\u20139474."),
+  Ref("Patwa, P., Aguilar, G., Kar, S., Pandey, S., PYKL, S., Gamb\u00e4ck, B., Chakraborty, T., Solorio, T., & Das, A. (2020). SemEval-2020 Task 9: Overview of sentiment analysis of code-mixed tweets. In *Proceedings of the Fourteenth Workshop on Semantic Evaluation* (pp. 774\u2013790). International Committee for Computational Linguistics. https://aclanthology.org/2020.semeval-1.100/"),
+  Ref("Pontiki, M., Galanis, D., Pavlopoulos, J., Papageorgiou, H., Androutsopoulos, I., & Manandhar, S. (2014). SemEval-2014 Task 4: Aspect based sentiment analysis. In *Proceedings of the 8th International Workshop on Semantic Evaluation* (pp. 27\u201335). Association for Computational Linguistics. https://aclanthology.org/S14-2004/"),
+  Ref("United Nations Department of Economic and Social Affairs. (2024). *E-Government Survey 2024: Accelerating digital transformation for sustainable development*. United Nations. https://publicadministration.un.org/egovkb/en-us/Reports/UN-E-Government-Survey-2024"),
+  Ref("Yao, S., Zhao, J., Yu, D., Du, N., Shafran, I., Narasimhan, K., & Cao, Y. (2023). *ReAct: Synergizing reasoning and acting in language models* [Paper presentation]. Eleventh International Conference on Learning Representations, Kigali, Rwanda. https://doi.org/10.48550/arXiv.2210.03629"),
+  Ref("Zhang, W., Deng, Y., Liu, B., Pan, S., & Bing, L. (2024). Sentiment analysis in the era of large language models: A reality check. In *Findings of the Association for Computational Linguistics: NAACL 2024* (pp. 3881\u20133906). Association for Computational Linguistics. https://aclanthology.org/2024.findings-naacl.246/"),
+  Ref("Zheng, L., Chiang, W.-L., Sheng, Y., Zhuang, S., Wu, Z., Zhuang, Y., Lin, Z., Li, Z., Li, D., Xing, E. P., Zhang, H., Gonzalez, J. E., & Stoica, I. (2023). Judging LLM-as-a-judge with MT-Bench and Chatbot Arena. *Advances in Neural Information Processing Systems, 36*. https://arxiv.org/abs/2306.05685"),
+];
+const hStyle = (id, name, run, paragraph) => ({ id, name, basedOn: "Normal", next: "Normal", quickFormat: true, run: { font: FONT, size: SIZE, color: "000000", ...run }, paragraph: { spacing: DOUBLE, keepNext: true, ...paragraph } });
+
+const fAppendix = [
+  PB(),
+  H1("Appendix A: Commands to Reproduce the Results"),
+  P("The following commands, run from the repository root after installing requirements.txt and adding a free Groq key to a .env file, regenerate the data, samples, model outputs, tables and figures in this report."),
+  Mono("python -m scraper.window_scraper --since 2025-10-01 --until 2026-09-30 --cap 5000"),
+  Mono("python -m rag.build_kb"),
+  Mono("python -m analysis.sampling"),
+  Mono("python -m analysis.run_analyzer      # resumable; repeat daily on the free tier"),
+  Mono("python -m analysis.baselines"),
+  Mono("python -m analysis.rq4_rag_ablation"),
+  Mono("python -m analysis.eda"),
+  Mono("python -m analysis.stats_tests", true),
+];
+const fDoc = new Document({
+  creator: "Rohan Mani John",
+  title: "QM640 Final Report",
+  features: { updateFields: true },
+  styles: {
+    default: { document: { run: { font: FONT, size: SIZE } } },
+    paragraphStyles: [
+      hStyle("Heading1", "Heading 1", { bold: true }, { alignment: AlignmentType.CENTER, outlineLevel: 0 }),
+      hStyle("Heading2", "Heading 2", { bold: true }, { alignment: AlignmentType.LEFT, outlineLevel: 1 }),
+      hStyle("Heading3", "Heading 3", { bold: true, italics: true }, { alignment: AlignmentType.LEFT, outlineLevel: 2 }),
+      { id: "TOC1", name: "toc 1", basedOn: "Normal", next: "Normal", run: { font: FONT, size: SIZE }, paragraph: { spacing: { line: 240, lineRule: LineRuleType.AUTO, before: 0, after: 0 } } },
+      { id: "TOC2", name: "toc 2", basedOn: "Normal", next: "Normal", run: { font: FONT, size: SIZE }, paragraph: { spacing: { line: 240, lineRule: LineRuleType.AUTO, before: 0, after: 0 }, indent: { left: 360 } } },
+    ],
+  },
+  numbering: { config: [{ reference: "bullets", levels: [{ level: 0, format: "bullet", text: "\u2022", alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] }] },
+  sections: [{
+    properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 } } },
+    headers: { default: new Header({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ children: [PageNumber.CURRENT], font: FONT, size: SIZE })] })] }) },
+    children: [...fTitlePage, ...fRepo, ...fAbstract, ...fContents, ...fIntro, ...fScope, ...fLit, ...fData, ...fEDA, ...fMethod, ...fResults, ...fDiscussion, ...fImpl, ...fRefs, ...fAppendix],
+  }],
+});
+Packer.toBuffer(fDoc).then((buf) => { fs.writeFileSync(FOUT, buf); console.log("wrote", FOUT, buf.length, "bytes"); });

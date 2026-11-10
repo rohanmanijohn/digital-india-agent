@@ -1,0 +1,10 @@
+label_primary_aspect,not_negative,negative,pct_negative
+aadhaar_kyc_linking,3,10,76.9
+app_update_bugs,0,48,100.0
+documents_certificates,4,29,87.9
+login_otp_authentication,0,53,100.0
+other,104,27,20.6
+payments_transactions,1,11,91.7
+privacy_security,0,10,100.0
+server_downtime_performance,2,67,97.1
+ui_usability,7,16,69.6

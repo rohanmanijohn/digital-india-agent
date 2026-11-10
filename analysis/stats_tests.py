@@ -39,10 +39,23 @@ REVIEWER_FILES = [DATA_PROCESSED / "gold_set_reviewer1.xlsx", DATA_PROCESSED / "
 SETTLED_FILE = DATA_PROCESSED / "gold_set_settled.xlsx"  # optional: review_id + settled_* for resolved disagreements
 
 
+def is_ai_draft(path) -> bool:
+    """AI-drafted label files carry a 'METHOD - read first' sheet; they are never treated as human reviewers."""
+    return "METHOD - read first" in pd.ExcelFile(path).sheet_names
+
+
 def settled_reference_labels() -> pd.DataFrame | None:
-    """Two independent human reviewers -> agreement (kappa) -> settled label (agreement, or joint resolution)."""
-    if not all(f.exists() for f in REVIEWER_FILES):
+    """Two independent human reviewers -> agreement (kappa) -> settled label (agreement, or joint resolution).
+
+    With only reviewer 1 present, that single human annotator's labels are the reference (no kappa is reported).
+    """
+    r1_file, r2_file = REVIEWER_FILES
+    if not r1_file.exists() or is_ai_draft(r1_file):
         return None
+    if not r2_file.exists() or is_ai_draft(r2_file):
+        one = pd.read_excel(r1_file)[["review_id", "label_sentiment", "label_primary_aspect", "label_language"]]
+        say(f"Reference labels: single human annotator (reviewer 1), n = {len(one)}; inter-rater reliability not measured.")
+        return one[one["label_sentiment"].isin(LABELS)]
     r1, r2 = (pd.read_excel(f)[["review_id", "label_sentiment", "label_primary_aspect", "label_language"]] for f in REVIEWER_FILES)
     both = r1.merge(r2, on="review_id", suffixes=("_1", "_2"))
     both = both[both["label_sentiment_1"].isin(LABELS) & both["label_sentiment_2"].isin(LABELS)]
@@ -76,6 +89,45 @@ def final_gold_labels(sheet: pd.DataFrame) -> pd.DataFrame:
     out["reviewed"] = check.isin(["ok", "fixed"])
     out["corrected"] = check.eq("fixed")
     return out
+
+
+def ai_draft_files() -> list | None:
+    """The two AI-drafted passes, under their original or renamed file names."""
+    for pair in ([DATA_PROCESSED / "pass_A_draft_labels.xlsx", DATA_PROCESSED / "pass_B_draft_labels.xlsx"], REVIEWER_FILES):
+        if all(f.exists() for f in pair) and all(is_ai_draft(f) for f in pair):
+            return pair
+    return None
+
+
+def ai_draft_labels() -> pd.DataFrame | None:
+    """Two AI-drafted passes (same model, not human-verified) -> keep rows where both passes agree.
+
+    The reviewer column in these files is ignored: the labels are machine drafts and are reported as such.
+    """
+    files = ai_draft_files()
+    if files is None:
+        return None
+    cols = ["review_id", "label_sentiment", "label_primary_aspect", "label_language"]
+    a, b = (pd.read_excel(f)[cols] for f in files)
+    both = a.merge(b, on="review_id", suffixes=("_A", "_B"))
+    out = pd.DataFrame({"review_id": both["review_id"]})
+    for field in ["sentiment", "primary_aspect", "language"]:
+        agree = both[f"label_{field}_A"] == both[f"label_{field}_B"]
+        out[f"label_{field}"] = both[f"label_{field}_A"].where(agree)
+    return out
+
+
+def ai_draft_reference(df: pd.DataFrame, systems: dict[str, str]):
+    """Provisional check against AI-drafted labels; not a substitute for the human reference set."""
+    draft = ai_draft_labels()
+    if draft is None:
+        return
+    g = df.merge(draft[draft["label_sentiment"].isin(LABELS)][["review_id", "label_sentiment", "label_language"]],
+                 on="review_id")
+    say(f"\n### Provisional: AI-drafted reference labels (Claude, two passes, consensus rows), n = {len(g)}")
+    say("Caveat: machine-generated and NOT human-verified; model self-consistency, not inter-rater reliability.")
+    _classifier_report(g, "label_sentiment", systems, "ai_draft")
+    _by_language(g, "label_sentiment", systems, "ai_draft", "label_language")
 
 
 def star_to_sentiment(r: int) -> str:
@@ -191,7 +243,7 @@ def rq1():
         say(f"\n### Human reference labels: {n}/400 settled - need >= 385 before the RQ1 test is valid.\n")
         return
     g = df.merge(gold[["review_id", "label_sentiment", "label_language"]], on="review_id")
-    say(f"\n### RQ1 test: human reference labels (two independent reviewers, settled), n = {len(g)}")
+    say(f"\n### RQ1 test: human reference labels , n = {len(g)}")
     _classifier_report(g, "label_sentiment", systems, "gold")
     _by_language(g, "label_sentiment", systems, "gold", "label_language")
     _confusion_figure(g, "label_sentiment", systems["LLM agent"], "gold")
@@ -227,6 +279,17 @@ def rq2():
     out["ci_low"], out["ci_high"] = [c[0] * 100 for c in ci], [c[1] * 100 for c in ci]
     out.round(2).to_csv(TAB / "rq2_aspect_by_sentiment.csv")
     say(out[["negative", "not_negative", "pct_negative", "std_residual_negative"]].to_string())
+
+    gold = settled_reference_labels()
+    if gold is not None:
+        a = res[["review_id", "primary_aspect"]].merge(
+            gold[gold["label_primary_aspect"].isin(ASPECTS)][["review_id", "label_primary_aspect"]], on="review_id")
+        acc = (a["primary_aspect"] == a["label_primary_aspect"]).mean()
+        kappa = cohen_kappa_score(a["label_primary_aspect"], a["primary_aspect"])
+        pd.DataFrame([{"n": len(a), "accuracy": acc, "kappa": kappa}]).round(3).to_csv(TAB / "rq2_aspect_vs_human.csv", index=False)
+        pd.crosstab(a["label_primary_aspect"], a["primary_aspect"]).to_csv(TAB / "rq2_aspect_confusion_vs_human.csv")
+        say(f"Validation of the agent's primary aspect against human reference labels, n = {len(a)}: "
+            f"accuracy = {acc:.3f}, Cohen's kappa = {kappa:.3f} (target accuracy >= 0.80)")
 
     # robustness: review-level logistic regression, overall negative ~ all aspects mentioned (multi-hot)
     X = pd.DataFrame([{a: int(any(x["aspect"] == a for x in asp)) for a in ASPECTS} for asp in res["aspects"]])
